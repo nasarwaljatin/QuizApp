@@ -141,6 +141,11 @@ export default function Login() {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                <div className="flex justify-end mt-2">
+                  <Link to="/forgot-password" className="text-xs text-primary-400 hover:text-primary-300 font-medium">
+                    Forgot Password?
+                  </Link>
+                </div>
               </div>
               <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2" disabled={loading}>
                 {loading ? 'Signing in...' : <><span>Sign In</span><ArrowRight className="w-4 h-4" /></>}

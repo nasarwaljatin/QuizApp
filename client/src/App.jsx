@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 // Pages
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import QuizPage from './pages/QuizPage';
 import ResultPage from './pages/ResultPage';
@@ -43,6 +44,7 @@ function AppRoutes() {
       {/* Public / Guest-only routes */}
       <Route path="/login" element={<RequireGuest><Login /></RequireGuest>} />
       <Route path="/signup" element={<RequireGuest><Signup /></RequireGuest>} />
+      <Route path="/forgot-password" element={<RequireGuest><ForgotPassword /></RequireGuest>} />
       <Route path="/admin/login" element={<RequireGuest><AdminLogin /></RequireGuest>} />
 
       {/* Student routes */}
