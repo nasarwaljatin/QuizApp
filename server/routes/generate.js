@@ -121,9 +121,14 @@ Return this EXACT JSON structure:
     if (geminiResponse.statusCode === 400) {
       return res.status(400).json({ message: 'The PDF could not be processed by the AI. It may be scanned/image-only or corrupted.' });
     }
+    if (geminiResponse.statusCode === 403 || geminiResponse.statusCode === 401) {
+      return res.status(500).json({ message: 'Gemini API key is invalid or not authorized. Please check the GEMINI_API_KEY environment variable on Render.' });
+    }
     if (geminiResponse.statusCode !== 200) {
-      console.error('Gemini error:', geminiResponse.body);
-      return res.status(500).json({ message: 'AI service returned an unexpected error. Please try again.' });
+      let geminiErr = '';
+      try { geminiErr = JSON.parse(geminiResponse.body)?.error?.message || geminiResponse.body?.slice(0, 200); } catch {}
+      console.error('Gemini unexpected error:', geminiResponse.statusCode, geminiResponse.body);
+      return res.status(500).json({ message: `AI error (${geminiResponse.statusCode}): ${geminiErr || 'Please try again.'}` });
     }
 
     // Parse Gemini response
