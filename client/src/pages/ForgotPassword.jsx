@@ -26,7 +26,8 @@ export default function ForgotPassword() {
       setInfo(res.data.message || 'OTP sent! Please check your email.');
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send OTP.');
+      const msg = err.response?.data?.error || err.response?.data?.message || 'Failed to send OTP.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -71,7 +72,7 @@ export default function ForgotPassword() {
         navigate('/login');
       }, 2000);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reset password.');
+      setError(err.response?.data?.error || err.response?.data?.message || 'Failed to reset password.');
     } finally {
       setLoading(false);
     }
