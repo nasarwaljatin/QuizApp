@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Users, BookOpen, TrendingUp, Zap, ShieldCheck, LogOut, PlusCircle, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Users, BookOpen, TrendingUp, Zap, ShieldCheck, LogOut, PlusCircle, ChevronRight, AlertTriangle, Folder } from 'lucide-react';
 
 export default function AdminDashboard() {
   const { logout } = useAuth();
@@ -36,6 +36,10 @@ export default function AdminDashboard() {
             <span className="text-xl font-bold text-slate-100">Admin Dashboard</span>
           </div>
           <div className="flex items-center gap-3">
+            <Link to="/admin/folders" className="btn-secondary py-2 px-4 text-sm flex items-center gap-2">
+              <Folder className="w-4 h-4" />
+              Manage Folders
+            </Link>
             <Link to="/admin/quizzes" className="btn-secondary py-2 px-4 text-sm flex items-center gap-2">
               <BookOpen className="w-4 h-4" />
               Manage Quizzes

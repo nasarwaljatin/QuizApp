@@ -9,8 +9,15 @@ const verifyAdmin = require('../middleware/verifyAdmin');
 // GET /api/quizzes — list all published quizzes (no correct answers)
 router.get('/', verifyStudent, async (req, res) => {
   try {
-    const quizzes = await Quiz.find({ isPublished: true })
-      .select('title description durationMinutes questions createdAt')
+    const { folder } = req.query;
+    const filter = { isPublished: true };
+    if (folder && folder !== 'all') {
+      filter.folderIds = folder;
+    }
+
+    const quizzes = await Quiz.find(filter)
+      .populate('folderIds', 'name')
+      .select('title description durationMinutes questions createdAt folderIds negativeMarkingPoints')
       .lean();
 
     // Strip correctAnswer from questions
@@ -48,7 +55,7 @@ router.get('/:id', verifyStudent, async (req, res) => {
 // GET /api/quizzes/admin/all — all quizzes including drafts
 router.get('/admin/all', verifyAdmin, async (req, res) => {
   try {
-    const quizzes = await Quiz.find().lean();
+    const quizzes = await Quiz.find().populate('folderIds', 'name').lean();
     const quizzesWithCount = quizzes.map(q => ({ ...q, questionCount: q.questions.length }));
     res.json(quizzesWithCount);
   } catch (err) {
@@ -59,7 +66,7 @@ router.get('/admin/all', verifyAdmin, async (req, res) => {
 // GET /api/quizzes/admin/:id — get a single quiz with correct answers (admin)
 router.get('/admin/:id', verifyAdmin, async (req, res) => {
   try {
-    const quiz = await Quiz.findById(req.params.id);
+    const quiz = await Quiz.findById(req.params.id).populate('folderIds', 'name');
     if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
     res.json(quiz);
   } catch (err) {
@@ -70,7 +77,7 @@ router.get('/admin/:id', verifyAdmin, async (req, res) => {
 // POST /api/quizzes — create quiz
 router.post('/', verifyAdmin, async (req, res) => {
   try {
-    const { title, description, durationMinutes, questions, isPublished, negativeMarkingPoints } = req.body;
+    const { title, description, durationMinutes, questions, isPublished, negativeMarkingPoints, folderIds } = req.body;
 
     if (!title || !durationMinutes || !questions || questions.length === 0) {
       return res.status(400).json({ message: 'Title, duration, and at least one question are required.' });
@@ -83,6 +90,7 @@ router.post('/', verifyAdmin, async (req, res) => {
       questions,
       isPublished: isPublished || false,
       negativeMarkingPoints: negativeMarkingPoints || 0,
+      folderIds: folderIds || [],
       createdBy: req.user.id
     });
 
@@ -96,7 +104,7 @@ router.post('/', verifyAdmin, async (req, res) => {
 // PUT /api/quizzes/:id — update quiz
 router.put('/:id', verifyAdmin, async (req, res) => {
   try {
-    const { title, description, durationMinutes, questions, isPublished, negativeMarkingPoints } = req.body;
+    const { title, description, durationMinutes, questions, isPublished, negativeMarkingPoints, folderIds } = req.body;
 
     const quiz = await Quiz.findById(req.params.id);
     if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
@@ -107,6 +115,7 @@ router.put('/:id', verifyAdmin, async (req, res) => {
     if (questions !== undefined) quiz.questions = questions;
     if (isPublished !== undefined) quiz.isPublished = isPublished;
     if (negativeMarkingPoints !== undefined) quiz.negativeMarkingPoints = negativeMarkingPoints;
+    if (folderIds !== undefined) quiz.folderIds = folderIds;
     quiz.updatedAt = new Date();
 
     await quiz.save();

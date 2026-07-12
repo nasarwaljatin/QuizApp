@@ -29,6 +29,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/adminAuth'));
 app.use('/api/quizzes', require('./routes/quizzes'));
 app.use('/api/attempts', require('./routes/attempts'));
+app.use('/api/folders', require('./routes/folders'));
 
 app.get('/', (req, res) => {
   res.send('Quiz App API is running ✅');

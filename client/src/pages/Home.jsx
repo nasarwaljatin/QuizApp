@@ -2,28 +2,35 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
-import { Clock, BookOpen, ChevronRight, Search, LogOut, LayoutDashboard, Trophy } from 'lucide-react';
+import { Clock, BookOpen, ChevronRight, Search, LogOut, LayoutDashboard, Trophy, Folder } from 'lucide-react';
 
 export default function Home() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState([]);
+  const [folders, setFolders] = useState([]);
+  const [activeFolder, setActiveFolder] = useState('all');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    const fetchQuizzes = async () => {
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const res = await api.get('/quizzes');
-        setQuizzes(res.data);
+        const [foldersRes, quizzesRes] = await Promise.all([
+          api.get('/folders'),
+          api.get(`/quizzes?folder=${activeFolder}`)
+        ]);
+        setFolders(foldersRes.data);
+        setQuizzes(quizzesRes.data);
       } catch (err) {
-        console.error('Failed to fetch quizzes', err);
+        console.error('Failed to fetch data', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchQuizzes();
-  }, []);
+    fetchData();
+  }, [activeFolder]);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -80,15 +87,48 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="relative mb-6">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            className="input pl-10 bg-slate-900"
-            placeholder="Search quizzes..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+        {/* Search & Tabs */}
+        <div className="mb-6 space-y-4">
+          {/* Folders Tabs (Horizontal Scroll) */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            <button
+              onClick={() => setActiveFolder('all')}
+              className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold transition-colors border ${
+                activeFolder === 'all'
+                  ? 'bg-primary-500/20 text-primary-300 border-primary-500/30'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              ALL
+            </button>
+            {folders.map(folder => (
+              <button
+                key={folder._id}
+                onClick={() => setActiveFolder(folder._id)}
+                className={`whitespace-nowrap flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors border ${
+                  activeFolder === folder._id
+                    ? 'bg-primary-500/20 text-primary-300 border-primary-500/30'
+                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <Folder className="w-4 h-4" />
+                {folder.name}
+                <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeFolder === folder._id ? 'bg-primary-500/20' : 'bg-slate-800'}`}>
+                  {folder.quizCount}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              className="input pl-10 bg-slate-900"
+              placeholder="Search quizzes in this folder..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Quiz grid */}
@@ -125,7 +165,7 @@ export default function Home() {
                   )}
                 </div>
                 <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-800">
-                  <div className="flex items-center gap-3 text-xs text-slate-500">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <span className="flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5" />
                       {quiz.durationMinutes} min
@@ -139,6 +179,12 @@ export default function Home() {
                         −{quiz.negativeMarkingPoints} pts
                       </span>
                     )}
+                    {quiz.folderIds?.map(f => (
+                      <span key={f._id} className="flex items-center gap-1 text-slate-300 bg-slate-800 border border-slate-700 rounded-full px-2 py-0.5 text-[10px] font-medium">
+                        <Folder className="w-3 h-3" />
+                        {f.name}
+                      </span>
+                    ))}
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-primary-400 transition-colors" />
                 </div>

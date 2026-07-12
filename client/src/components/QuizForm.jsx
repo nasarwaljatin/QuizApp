@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Trash2, ChevronDown, ChevronUp, GripVertical, Check, Folder } from 'lucide-react';
+import api from '../api/axios';
 
 const emptyQuestion = () => ({
   questionText: '',
@@ -19,6 +20,49 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
       : [emptyQuestion()]
   );
   const [expanded, setExpanded] = useState([0]);
+
+  // Folder states
+  const [allFolders, setAllFolders] = useState([]);
+  const [selectedFolderIds, setSelectedFolderIds] = useState(
+    initialData?.folderIds?.map(f => typeof f === 'string' ? f : f._id) || []
+  );
+  const [newFolderName, setNewFolderName] = useState('');
+  const [creatingFolder, setCreatingFolder] = useState(false);
+
+  useEffect(() => {
+    fetchFolders();
+  }, []);
+
+  const fetchFolders = async () => {
+    try {
+      const res = await api.get('/folders');
+      setAllFolders(res.data);
+    } catch (err) {
+      console.error('Failed to load folders');
+    }
+  };
+
+  const toggleFolder = (folderId) => {
+    setSelectedFolderIds(prev => 
+      prev.includes(folderId) ? prev.filter(id => id !== folderId) : [...prev, folderId]
+    );
+  };
+
+  const handleCreateFolder = async (e) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    setCreatingFolder(true);
+    try {
+      const res = await api.post('/folders', { name: newFolderName });
+      setAllFolders(prev => [...prev, res.data]);
+      setSelectedFolderIds(prev => [...prev, res.data._id]);
+      setNewFolderName('');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to create folder');
+    } finally {
+      setCreatingFolder(false);
+    }
+  };
 
   const toggleExpanded = (i) => {
     setExpanded(prev =>
@@ -76,7 +120,7 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
         alert(`Question ${i + 1} has no correct answer selected.`); return;
       }
     }
-    onSubmit({ title, description, durationMinutes: Number(durationMinutes), isPublished, negativeMarkingPoints: Number(negativeMarkingPoints), questions });
+    onSubmit({ title, description, durationMinutes: Number(durationMinutes), isPublished, negativeMarkingPoints: Number(negativeMarkingPoints), folderIds: selectedFolderIds, questions });
   };
 
   return (
@@ -127,6 +171,61 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
             </div>
             <span className="text-sm text-slate-400">{isPublished ? 'Published' : 'Draft'}</span>
           </label>
+        </div>
+
+        {/* Folders Multi-Select */}
+        <div className="border-t border-slate-700 pt-4 mt-2">
+          <label className="label flex items-center gap-2 mb-3">
+            <Folder className="w-4 h-4 text-slate-400" />
+            Assign to Folders (Optional)
+          </label>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {allFolders.map(folder => {
+              const isSelected = selectedFolderIds.includes(folder._id);
+              return (
+                <button
+                  key={folder._id}
+                  type="button"
+                  onClick={() => toggleFolder(folder._id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${
+                    isSelected 
+                      ? 'bg-primary-500/20 text-primary-300 border-primary-500/30' 
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  {isSelected && <Check className="w-3.5 h-3.5" />}
+                  {folder.name}
+                </button>
+              );
+            })}
+            {allFolders.length === 0 && <span className="text-sm text-slate-500">No folders exist yet.</span>}
+          </div>
+          
+          {/* Inline Create Folder */}
+          <div className="flex items-center gap-2 max-w-sm">
+            <input
+              type="text"
+              className="input py-1.5 text-sm flex-1"
+              placeholder="+ New folder name..."
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleCreateFolder(e);
+                }
+              }}
+              disabled={creatingFolder}
+            />
+            <button 
+              type="button" 
+              onClick={handleCreateFolder} 
+              disabled={creatingFolder || !newFolderName.trim()}
+              className="btn-secondary py-1.5 px-3 text-sm flex-shrink-0"
+            >
+              Add
+            </button>
+          </div>
         </div>
       </div>
 

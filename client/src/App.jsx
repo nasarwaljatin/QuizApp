@@ -11,6 +11,7 @@ import StudentDashboard from './pages/StudentDashboard';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ManageQuizzes from './pages/admin/ManageQuizzes';
+import ManageFolders from './pages/admin/ManageFolders';
 
 // ─── Protected Route Wrappers ─────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ function AppRoutes() {
       {/* Admin routes */}
       <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
       <Route path="/admin/quizzes" element={<RequireAdmin><ManageQuizzes /></RequireAdmin>} />
+      <Route path="/admin/folders" element={<RequireAdmin><ManageFolders /></RequireAdmin>} />
 
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />
