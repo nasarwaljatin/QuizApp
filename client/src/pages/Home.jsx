@@ -134,6 +134,11 @@ export default function Home() {
                       <BookOpen className="w-3.5 h-3.5" />
                       {quiz.questionCount} questions
                     </span>
+                    {quiz.negativeMarkingPoints > 0 && (
+                      <span className="flex items-center gap-1 text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5 text-xs font-medium">
+                        −{quiz.negativeMarkingPoints} pts
+                      </span>
+                    )}
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-primary-400 transition-colors" />
                 </div>

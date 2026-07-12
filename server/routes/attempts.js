@@ -27,13 +27,21 @@ router.post('/', verifyStudent, async (req, res) => {
       return { questionText, selectedAnswer, correctAnswer, isCorrect };
     });
 
-    const score = detailedAnswers.filter(a => a.isCorrect).length;
+    const correctCount = detailedAnswers.filter(a => a.isCorrect).length;
+    // Wrong = answered incorrectly (blank/unanswered answers are NOT penalised)
+    const wrongCount = detailedAnswers.filter(a => !a.isCorrect && a.selectedAnswer !== '').length;
+
+    const penalty = quiz.negativeMarkingPoints || 0;
+    const negativeMarksDeducted = parseFloat((wrongCount * penalty).toFixed(4));
+    const rawScore = correctCount - negativeMarksDeducted;
+    const score = Math.max(0, parseFloat(rawScore.toFixed(4))); // never below 0
 
     const attempt = new Attempt({
       studentId: req.user.id,
       quizId,
       answers: detailedAnswers,
       score,
+      negativeMarksDeducted,
       totalQuestions: quiz.questions.length,
       timeTakenSeconds,
       autoSubmitted: autoSubmitted || false

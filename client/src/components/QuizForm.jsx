@@ -12,6 +12,7 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
   const [description, setDescription] = useState(initialData?.description || '');
   const [durationMinutes, setDurationMinutes] = useState(initialData?.durationMinutes || 10);
   const [isPublished, setIsPublished] = useState(initialData?.isPublished || false);
+  const [negativeMarkingPoints, setNegativeMarkingPoints] = useState(initialData?.negativeMarkingPoints ?? 0);
   const [questions, setQuestions] = useState(
     initialData?.questions?.length > 0
       ? initialData.questions
@@ -75,7 +76,7 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
         alert(`Question ${i + 1} has no correct answer selected.`); return;
       }
     }
-    onSubmit({ title, description, durationMinutes: Number(durationMinutes), isPublished, questions });
+    onSubmit({ title, description, durationMinutes: Number(durationMinutes), isPublished, negativeMarkingPoints: Number(negativeMarkingPoints), questions });
   };
 
   return (
@@ -96,17 +97,36 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
             <label className="label">Duration (minutes) *</label>
             <input className="input" type="number" min={1} max={180} value={durationMinutes} onChange={e => setDurationMinutes(e.target.value)} required />
           </div>
-          <div className="flex items-end">
-            <label className="flex items-center gap-3 cursor-pointer pb-3">
-              <div
-                onClick={() => setIsPublished(!isPublished)}
-                className={`w-12 h-6 rounded-full transition-all duration-300 flex items-center px-1 ${isPublished ? 'bg-primary-500' : 'bg-slate-700'}`}
-              >
-                <div className={`w-4 h-4 rounded-full bg-white transition-transform duration-300 ${isPublished ? 'translate-x-6' : 'translate-x-0'}`} />
-              </div>
-              <span className="text-sm text-slate-400">{isPublished ? 'Published' : 'Draft'}</span>
-            </label>
+          <div>
+            <label className="label">Negative Marking (points per wrong answer)</label>
+            <div className="relative">
+              <input
+                className="input pr-16"
+                type="number"
+                min={0}
+                max={10}
+                step={0.25}
+                value={negativeMarkingPoints}
+                onChange={e => setNegativeMarkingPoints(e.target.value)}
+                placeholder="0 = disabled"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 pointer-events-none">
+                {Number(negativeMarkingPoints) > 0 ? `−${negativeMarkingPoints} pts` : 'OFF'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">e.g. 0.25 → deduct ¼ pt per wrong answer. 0 = no penalty.</p>
           </div>
+        </div>
+        <div className="flex items-center">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div
+              onClick={() => setIsPublished(!isPublished)}
+              className={`w-12 h-6 rounded-full transition-all duration-300 flex items-center px-1 ${isPublished ? 'bg-primary-500' : 'bg-slate-700'}`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white transition-transform duration-300 ${isPublished ? 'translate-x-6' : 'translate-x-0'}`} />
+            </div>
+            <span className="text-sm text-slate-400">{isPublished ? 'Published' : 'Draft'}</span>
+          </label>
         </div>
       </div>
 

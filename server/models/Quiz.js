@@ -13,6 +13,7 @@ const quizSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   questions: [questionSchema],
   isPublished: { type: Boolean, default: false },
+  negativeMarkingPoints: { type: Number, default: 0, min: 0 }, // 0 = disabled, e.g. 0.25 = deduct 0.25 per wrong answer
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
