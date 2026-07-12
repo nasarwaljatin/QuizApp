@@ -50,7 +50,7 @@ const callGeminiWithPdf = (base64Data, mimeType, prompt) => {
 
     const options = {
       hostname: 'generativelanguage.googleapis.com',
-      path: `/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      path: `/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -126,14 +126,23 @@ Return this EXACT JSON structure:
 
     let geminiResponse;
     try {
-      geminiResponse = await callGeminiWithRetry(base64Pdf, 'application/pdf', prompt);
+      geminiResponse = await callGeminiWithPdf(base64Pdf, 'application/pdf', prompt);
     } catch (err) {
       return res.status(503).json({ message: 'Failed to reach AI service. Please check your connection and try again.' });
     }
 
     // Handle Gemini API errors
     if (geminiResponse.statusCode === 429) {
-      return res.status(429).json({ message: 'AI is rate-limited on the free tier. Please wait 1–2 minutes and try again.' });
+      // Parse Gemini's error to distinguish RPM vs daily quota
+      let quotaMsg = 'Rate limit hit.';
+      try {
+        const errBody = JSON.parse(geminiResponse.body);
+        quotaMsg = errBody?.error?.message || quotaMsg;
+      } catch {}
+      console.warn('Gemini 429:', quotaMsg);
+      return res.status(429).json({
+        message: 'Gemini free tier quota hit. Please generate a NEW API key at aistudio.google.com/apikey, update it in Render Environment Variables, and try again.'
+      });
     }
     if (geminiResponse.statusCode === 400) {
       return res.status(400).json({ message: 'The PDF could not be processed by the AI. It may be scanned/image-only or corrupted.' });
