@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const https = require('https');
+const pdfParse = require('pdf-parse');
 const Quiz = require('../models/Quiz');
 const verifyAdmin = require('../middleware/verifyAdmin');
 
@@ -18,8 +19,8 @@ const upload = multer({
   }
 });
 
-// Helper: call Gemini API with inline base64 PDF
-const callGeminiWithPdf = (base64Data, mimeType, prompt) => {
+// Helper: call Gemini API with plain text (NOT base64 PDF — much lower token usage)
+const callGeminiWithText = (textPrompt) => {
   return new Promise((resolve, reject) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -29,17 +30,7 @@ const callGeminiWithPdf = (base64Data, mimeType, prompt) => {
     const requestBody = JSON.stringify({
       contents: [
         {
-          parts: [
-            {
-              inline_data: {
-                mime_type: mimeType,
-                data: base64Data
-              }
-            },
-            {
-              text: prompt
-            }
-          ]
+          parts: [{ text: textPrompt }]
         }
       ],
       generationConfig: {
@@ -72,23 +63,6 @@ const callGeminiWithPdf = (base64Data, mimeType, prompt) => {
   });
 };
 
-// Helper: wait N milliseconds
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Helper: call Gemini with automatic retry on 429 (up to 3 attempts, 15s apart)
-const callGeminiWithRetry = async (base64Data, mimeType, prompt, maxRetries = 3) => {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const response = await callGeminiWithPdf(base64Data, mimeType, prompt);
-    if (response.statusCode !== 429) return response;
-    if (attempt < maxRetries) {
-      console.log(`Gemini 429 rate limit — retrying in 15s (attempt ${attempt}/${maxRetries})...`);
-      await sleep(15000);
-    }
-  }
-  // Return the last 429 response after exhausting retries
-  return { statusCode: 429, body: '' };
-};
-
 // POST /api/generate/from-pdf
 router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => {
   try {
@@ -102,16 +76,36 @@ router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => 
       return res.status(400).json({ message: 'Quiz title and duration are required.' });
     }
 
-    const base64Pdf = req.file.buffer.toString('base64');
+    // ── Step 1: Extract text from PDF locally (no token cost) ──────────────────
+    let pdfText = '';
+    try {
+      const pdfData = await pdfParse(req.file.buffer);
+      pdfText = pdfData.text || '';
+    } catch (err) {
+      return res.status(400).json({ message: 'Could not read this PDF. It may be corrupted or password-protected.' });
+    }
 
-    const prompt = `You are an expert quiz extractor. Extract ALL multiple-choice questions from this PDF document.
+    if (!pdfText.trim() || pdfText.trim().length < 50) {
+      return res.status(422).json({
+        message: 'No readable text found in this PDF. It appears to be a scanned/image-only PDF. Please use a PDF with selectable text.'
+      });
+    }
+
+    // Trim text to avoid exceeding token limits (keep first ~60,000 chars ≈ ~15,000 tokens)
+    const trimmedText = pdfText.length > 60000 ? pdfText.slice(0, 60000) + '\n[...document continues...]' : pdfText;
+
+    // ── Step 2: Send extracted TEXT to Gemini (tiny token usage) ───────────────
+    const prompt = `You are an expert quiz extractor. The following is text extracted from a PDF exam paper.
+
+Carefully read the text and extract ALL multiple-choice questions.
 
 STRICT RULES:
 1. Return ONLY valid JSON — no markdown, no prose, no code blocks, no explanation.
 2. Do NOT determine or guess the correct answer. Leave correct answers completely out.
 3. Each question MUST have at least 2 options and at most 6 options.
-4. Detect the language of each question (e.g. "English", "Hindi", "Gujarati", etc.) and include it in the language field.
-5. If the question has an image or diagram that cannot be extracted, skip it.
+4. Detect the language of each question (e.g. "English", "Hindi", "Gujarati") and include it in the language field.
+5. Clean up any OCR or formatting artifacts in question text.
+6. Skip any questions that are incomplete or have no options.
 
 Return this EXACT JSON structure:
 {
@@ -122,38 +116,39 @@ Return this EXACT JSON structure:
       "language": "English"
     }
   ]
-}`;
+}
+
+Here is the extracted PDF text:
+---
+${trimmedText}
+---`;
 
     let geminiResponse;
     try {
-      geminiResponse = await callGeminiWithPdf(base64Pdf, 'application/pdf', prompt);
+      geminiResponse = await callGeminiWithText(prompt);
     } catch (err) {
-      return res.status(503).json({ message: 'Failed to reach AI service. Please check your connection and try again.' });
+      return res.status(503).json({ message: 'Failed to reach AI service. Please try again.' });
     }
 
     // Handle Gemini API errors
     if (geminiResponse.statusCode === 429) {
-      // Parse Gemini's error to distinguish RPM vs daily quota
-      let quotaMsg = 'Rate limit hit.';
-      try {
-        const errBody = JSON.parse(geminiResponse.body);
-        quotaMsg = errBody?.error?.message || quotaMsg;
-      } catch {}
-      console.warn('Gemini 429:', quotaMsg);
+      let quotaDetail = '';
+      try { quotaDetail = JSON.parse(geminiResponse.body)?.error?.message || ''; } catch {}
+      console.warn('Gemini 429:', quotaDetail);
       return res.status(429).json({
-        message: 'Gemini free tier quota hit. Please generate a NEW API key at aistudio.google.com/apikey, update it in Render Environment Variables, and try again.'
+        message: 'Gemini API quota exceeded. Please generate a new API key at aistudio.google.com/apikey and update GEMINI_API_KEY in Render.'
       });
     }
-    if (geminiResponse.statusCode === 400) {
-      return res.status(400).json({ message: 'The PDF could not be processed by the AI. It may be scanned/image-only or corrupted.' });
-    }
     if (geminiResponse.statusCode === 403 || geminiResponse.statusCode === 401) {
-      return res.status(500).json({ message: 'Gemini API key is invalid or not authorized. Please check the GEMINI_API_KEY environment variable on Render.' });
+      return res.status(500).json({ message: 'Gemini API key is invalid. Please check GEMINI_API_KEY in Render Environment Variables.' });
+    }
+    if (geminiResponse.statusCode === 400) {
+      return res.status(400).json({ message: 'Gemini could not process this request. Please try a different PDF.' });
     }
     if (geminiResponse.statusCode !== 200) {
       let geminiErr = '';
-      try { geminiErr = JSON.parse(geminiResponse.body)?.error?.message || geminiResponse.body?.slice(0, 200); } catch {}
-      console.error('Gemini unexpected error:', geminiResponse.statusCode, geminiResponse.body);
+      try { geminiErr = JSON.parse(geminiResponse.body)?.error?.message || ''; } catch {}
+      console.error('Gemini error:', geminiResponse.statusCode, geminiResponse.body);
       return res.status(500).json({ message: `AI error (${geminiResponse.statusCode}): ${geminiErr || 'Please try again.'}` });
     }
 
@@ -165,49 +160,44 @@ Return this EXACT JSON structure:
       return res.status(500).json({ message: 'Could not parse AI response. Please try again.' });
     }
 
-    // Extract the text content from Gemini's response structure
     const textContent = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!textContent) {
-      return res.status(500).json({ message: 'AI returned an empty response. The PDF may have no extractable text.' });
+      return res.status(500).json({ message: 'AI returned an empty response. Please try again.' });
     }
 
     // Parse the JSON returned by Gemini
     let extractedData;
     try {
-      // Strip any accidental markdown wrapping (```json ... ```)
       const cleaned = textContent.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
       extractedData = JSON.parse(cleaned);
     } catch {
       return res.status(422).json({
-        message: 'AI did not return valid JSON. This can happen with complex or image-heavy PDFs. Please try a text-based PDF.',
-        rawResponse: textContent.substring(0, 500)
+        message: 'AI response was not valid JSON. Please try again.',
+        rawResponse: textContent.substring(0, 300)
       });
     }
 
-    // Validate structure
     if (!extractedData.questions || !Array.isArray(extractedData.questions) || extractedData.questions.length === 0) {
-      return res.status(422).json({ message: 'No questions could be extracted from this PDF. Please check the file content.' });
+      return res.status(422).json({ message: 'No questions could be extracted. Make sure the PDF contains multiple-choice questions.' });
     }
 
-    // Filter and validate individual questions
-    const validQuestions = extractedData.questions.filter(q => {
-      return (
-        q.questionText &&
-        typeof q.questionText === 'string' &&
-        q.questionText.trim() &&
-        Array.isArray(q.options) &&
-        q.options.length >= 2 &&
-        q.options.every(o => typeof o === 'string' && o.trim())
-      );
-    }).map(q => ({
+    // Validate and clean individual questions
+    const validQuestions = extractedData.questions.filter(q =>
+      q.questionText &&
+      typeof q.questionText === 'string' &&
+      q.questionText.trim() &&
+      Array.isArray(q.options) &&
+      q.options.length >= 2 &&
+      q.options.every(o => typeof o === 'string' && o.trim())
+    ).map(q => ({
       questionText: q.questionText.trim(),
       options: q.options.map(o => o.trim()),
       language: q.language || 'English',
-      correctAnswer: '' // deliberately empty — set by admin self-attempt
+      correctAnswer: ''
     }));
 
     if (validQuestions.length === 0) {
-      return res.status(422).json({ message: 'All extracted questions failed validation. Please check the PDF format.' });
+      return res.status(422).json({ message: 'All extracted questions failed validation. Check the PDF format.' });
     }
 
     // Parse folderIds
@@ -215,9 +205,7 @@ Return this EXACT JSON structure:
     if (folderIds) {
       try {
         parsedFolderIds = typeof folderIds === 'string' ? JSON.parse(folderIds) : folderIds;
-      } catch {
-        parsedFolderIds = [];
-      }
+      } catch { parsedFolderIds = []; }
     }
 
     // Save as draft quiz
@@ -233,15 +221,13 @@ Return this EXACT JSON structure:
 
     await quiz.save();
 
-    // Determine if extraction might be incomplete (< 3 questions for a substantial file)
-    const pageSizeEstimate = req.file.size / 50000; // rough estimate: 50KB per page
-    const lowExtractionWarning = validQuestions.length < 3 && pageSizeEstimate > 2;
+    const lowExtractionWarning = validQuestions.length < 3 && pdfText.length > 2000;
 
     res.status(201).json({
       quiz,
       extractedCount: validQuestions.length,
       warning: lowExtractionWarning
-        ? `Only ${validQuestions.length} question(s) were extracted from a potentially multi-page PDF. The PDF may be image-based or low quality.`
+        ? `Only ${validQuestions.length} question(s) extracted. The PDF may have complex formatting.`
         : null
     });
 
@@ -250,7 +236,7 @@ Return this EXACT JSON structure:
       return res.status(400).json({ message: 'Only PDF files are accepted.' });
     }
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ message: 'PDF file is too large. Maximum size is 10MB.' });
+      return res.status(400).json({ message: 'PDF is too large. Maximum size is 10MB.' });
     }
     console.error('Generate from PDF error:', err);
     res.status(500).json({ message: 'Server error.', error: err.message });
