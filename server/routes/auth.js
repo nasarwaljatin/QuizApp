@@ -32,19 +32,35 @@ const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString()
 
 // Helper: send email
 const sendEmail = async (to, subject, text) => {
-  // In dev mode without Gmail credentials, just log the OTP
-  if (!process.env.GMAIL_USER || process.env.GMAIL_USER === 'your_gmail@gmail.com') {
+  // If no Resend API key is set, log OTP to console in Dev Mode
+  if (!process.env.RESEND_API_KEY) {
     console.log(`[DEV MODE] Email to ${to}: ${subject} — ${text}`);
     return;
   }
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD
+  
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'QuizApp <onboarding@resend.dev>',
+        to: [to],
+        subject: subject,
+        text: text
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Resend API returned an error');
     }
-  });
-  await transporter.sendMail({ from: process.env.GMAIL_USER, to, subject, text });
+  } catch (err) {
+    console.error('Failed to send email via Resend:', err.message);
+    throw err;
+  }
 };
 
 // POST /api/auth/signup
