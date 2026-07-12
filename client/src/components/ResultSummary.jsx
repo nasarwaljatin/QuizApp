@@ -15,8 +15,6 @@ export default function ResultSummary({ attempt, quizTitle }) {
   const seconds = attempt.timeTakenSeconds % 60;
   const timeStr = `${minutes}m ${seconds}s`;
 
-  const wrongCount = attempt.totalQuestions - attempt.score;
-
   let grade = { label: 'Excellent!', color: 'text-emerald-400', bg: 'bg-emerald-500/20', border: 'border-emerald-500/30' };
   if (percentage < 40) grade = { label: 'Needs Work', color: 'text-red-400', bg: 'bg-red-500/20', border: 'border-red-500/30' };
   else if (percentage < 70) grade = { label: 'Good Effort', color: 'text-amber-400', bg: 'bg-amber-500/20', border: 'border-amber-500/30' };
