@@ -1,18 +1,30 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Upload, FileText, ShieldCheck, Folder, X, Plus, AlertTriangle, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, ShieldCheck, Folder, X, Plus, AlertTriangle, Loader2, Sparkles, ClipboardPaste } from 'lucide-react';
 import api from '../../api/axios';
 
 export default function GenerateFromPdf() {
   const navigate = useNavigate();
-  const [file, setFile] = useState(null);
-  const [dragging, setDragging] = useState(false);
+
+  // Tab: 'text' | 'pdf'
+  const [mode, setMode] = useState('text');
+
+  // Shared fields
   const [title, setTitle] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [allFolders, setAllFolders] = useState([]);
   const [selectedFolderIds, setSelectedFolderIds] = useState([]);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
+
+  // Paste text mode
+  const [pastedText, setPastedText] = useState('');
+
+  // PDF upload mode
+  const [file, setFile] = useState(null);
+  const [dragging, setDragging] = useState(false);
+
+  // State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
@@ -22,30 +34,19 @@ export default function GenerateFromPdf() {
   }, []);
 
   const handleFileDrop = (e) => {
-    e.preventDefault();
-    setDragging(false);
+    e.preventDefault(); setDragging(false);
     const dropped = e.dataTransfer.files[0];
-    if (dropped?.type === 'application/pdf') {
-      setFile(dropped);
-      setError('');
-    } else {
-      setError('Only PDF files are supported.');
-    }
+    if (dropped?.type === 'application/pdf') { setFile(dropped); setError(''); }
+    else setError('Only PDF files are supported.');
   };
 
   const handleFileSelect = (e) => {
     const selected = e.target.files[0];
-    if (selected?.type === 'application/pdf') {
-      setFile(selected);
-      setError('');
-    } else {
-      setError('Only PDF files are supported.');
-    }
+    if (selected?.type === 'application/pdf') { setFile(selected); setError(''); }
+    else setError('Only PDF files are supported.');
   };
 
-  const toggleFolder = (id) => {
-    setSelectedFolderIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
+  const toggleFolder = (id) => setSelectedFolderIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const handleCreateFolder = async (e) => {
     e.preventDefault();
@@ -58,42 +59,52 @@ export default function GenerateFromPdf() {
       setNewFolderName('');
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to create folder');
-    } finally {
-      setCreatingFolder(false);
-    }
+    } finally { setCreatingFolder(false); }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file) return setError('Please select a PDF file.');
     if (!title.trim()) return setError('Please enter a quiz title.');
+
+    if (mode === 'text') {
+      if (!pastedText.trim() || pastedText.trim().length < 20)
+        return setError('Please paste the question text (at least 20 characters).');
+    } else {
+      if (!file) return setError('Please select a PDF file.');
+    }
 
     setError(''); setWarning(''); setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('pdf', file);
-      formData.append('title', title);
-      formData.append('durationMinutes', durationMinutes);
-      formData.append('folderIds', JSON.stringify(selectedFolderIds));
+      let res;
 
-      const res = await api.post('/generate/from-pdf', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 180000 // 3 min timeout — allows server-side retry on rate limit
-      });
+      if (mode === 'text') {
+        res = await api.post('/generate/from-text', {
+          text: pastedText,
+          title,
+          durationMinutes,
+          folderIds: JSON.stringify(selectedFolderIds)
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('pdf', file);
+        formData.append('title', title);
+        formData.append('durationMinutes', durationMinutes);
+        formData.append('folderIds', JSON.stringify(selectedFolderIds));
+        res = await api.post('/generate/from-pdf', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 180000
+        });
+      }
 
       if (res.data.warning) {
         setWarning(res.data.warning);
-        // Brief pause so admin sees the warning before proceeding
         setTimeout(() => navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`), 3000);
       } else {
         navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`);
       }
     } catch (err) {
-      const msg = err.response?.data?.message || 'Failed to generate quiz. Please try again.';
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
+      setError(err.response?.data?.message || 'Failed to generate quiz. Please try again.');
+    } finally { setLoading(false); }
   };
 
   return (
@@ -105,7 +116,7 @@ export default function GenerateFromPdf() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <ShieldCheck className="w-5 h-5 text-accent-400" />
-          <span className="text-xl font-bold text-slate-100">Generate Quiz from PDF</span>
+          <span className="text-xl font-bold text-slate-100">Generate Quiz with AI</span>
           <span className="ml-auto flex items-center gap-1.5 text-xs font-medium text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-3 py-1">
             <Sparkles className="w-3 h-3" />
             Powered by Gemini AI
@@ -119,7 +130,7 @@ export default function GenerateFromPdf() {
           <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <div>
             <p className="font-medium mb-0.5">How this works</p>
-            <p className="text-primary-400 text-xs">Gemini AI will extract all questions and options from your PDF. You'll then take a self-attempt to set the correct answers — the AI never guesses answers on your behalf.</p>
+            <p className="text-primary-400 text-xs">Gemini AI extracts all questions and options from your content. You then take a self-attempt to set the correct answers — the AI never guesses answers on your behalf.</p>
           </div>
         </div>
 
@@ -133,18 +144,17 @@ export default function GenerateFromPdf() {
         {warning && (
           <div className="bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl px-4 py-3 text-sm mb-6 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <span>{warning} Redirecting you to set answers in a moment...</span>
+            <span>{warning} Redirecting you to set answers...</span>
           </div>
         )}
 
         {loading ? (
-          /* Loading state */
           <div className="card text-center py-20">
             <div className="w-16 h-16 rounded-2xl bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mx-auto mb-6">
               <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
             </div>
-            <h2 className="text-xl font-bold text-slate-100 mb-2">Processing your PDF</h2>
-            <p className="text-slate-400 text-sm max-w-xs mx-auto">Gemini AI is reading and extracting all questions from your document. This may take up to a minute...</p>
+            <h2 className="text-xl font-bold text-slate-100 mb-2">Extracting questions...</h2>
+            <p className="text-slate-400 text-sm max-w-xs mx-auto">Gemini AI is reading your content and identifying all multiple-choice questions.</p>
             <div className="mt-6 flex justify-center gap-1">
               {[0,1,2].map(i => (
                 <div key={i} className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
@@ -153,41 +163,87 @@ export default function GenerateFromPdf() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* PDF Upload */}
-            <div className="card">
-              <h2 className="text-base font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-primary-400" />
-                Upload PDF
-              </h2>
 
-              {!file ? (
-                <div
-                  className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${dragging ? 'border-primary-500 bg-primary-500/5' : 'border-slate-700 hover:border-slate-600'}`}
-                  onDragOver={e => { e.preventDefault(); setDragging(true); }}
-                  onDragLeave={() => setDragging(false)}
-                  onDrop={handleFileDrop}
-                  onClick={() => document.getElementById('pdf-input').click()}
+            {/* Mode tabs */}
+            <div className="card p-2">
+              <div className="flex gap-1 bg-slate-800/60 rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={() => { setMode('text'); setError(''); }}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${mode === 'text' ? 'bg-slate-700 text-slate-100 shadow' : 'text-slate-400 hover:text-slate-200'}`}
                 >
-                  <Upload className="w-10 h-10 text-slate-500 mx-auto mb-3" />
-                  <p className="text-slate-300 font-medium mb-1">Drag & drop your PDF here</p>
-                  <p className="text-slate-500 text-sm">or click to browse · Max 10MB</p>
-                  <input id="pdf-input" type="file" accept="application/pdf" className="hidden" onChange={handleFileSelect} />
-                </div>
-              ) : (
-                <div className="flex items-center gap-4 bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-4">
-                  <div className="w-10 h-10 rounded-lg bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-5 h-5 text-red-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-slate-200 font-medium truncate">{file.name}</p>
-                    <p className="text-slate-500 text-xs">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                  </div>
-                  <button type="button" onClick={() => setFile(null)} className="text-slate-400 hover:text-slate-200">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
+                  <ClipboardPaste className="w-4 h-4" />
+                  Paste Text
+                  <span className="text-xs bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full">Recommended</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode('pdf'); setError(''); }}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${mode === 'pdf' ? 'bg-slate-700 text-slate-100 shadow' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  <FileText className="w-4 h-4" />
+                  Upload PDF
+                </button>
+              </div>
             </div>
+
+            {/* Paste Text mode */}
+            {mode === 'text' && (
+              <div className="card">
+                <h2 className="text-base font-semibold text-slate-100 mb-1 flex items-center gap-2">
+                  <ClipboardPaste className="w-4 h-4 text-primary-400" />
+                  Paste Question Text
+                </h2>
+                <p className="text-slate-500 text-xs mb-4">Copy the questions from your PDF / document and paste them here. Include question numbers, options (A/B/C/D), everything.</p>
+                <textarea
+                  className="input text-sm font-mono"
+                  rows={14}
+                  placeholder={"Example:\n\n1. Which of the following is an operating system?\n(A) MS Word\n(B) Windows 10\n(C) Chrome\n(D) Photoshop\n\n2. What does CPU stand for?\n(A) Central Processing Unit\n(B) Computer Personal Unit\n..."}
+                  value={pastedText}
+                  onChange={e => setPastedText(e.target.value)}
+                />
+                {pastedText.length > 0 && (
+                  <p className="text-slate-500 text-xs mt-2">{pastedText.length.toLocaleString()} characters pasted</p>
+                )}
+              </div>
+            )}
+
+            {/* PDF Upload mode */}
+            {mode === 'pdf' && (
+              <div className="card">
+                <h2 className="text-base font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary-400" />
+                  Upload PDF
+                </h2>
+                {!file ? (
+                  <div
+                    className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${dragging ? 'border-primary-500 bg-primary-500/5' : 'border-slate-700 hover:border-slate-600'}`}
+                    onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={handleFileDrop}
+                    onClick={() => document.getElementById('pdf-input').click()}
+                  >
+                    <Upload className="w-10 h-10 text-slate-500 mx-auto mb-3" />
+                    <p className="text-slate-300 font-medium mb-1">Drag & drop your PDF here</p>
+                    <p className="text-slate-500 text-sm">or click to browse · Max 10MB · Text-based PDFs work best</p>
+                    <input id="pdf-input" type="file" accept="application/pdf" className="hidden" onChange={handleFileSelect} />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-4 bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-4">
+                    <div className="w-10 h-10 rounded-lg bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-5 h-5 text-red-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-slate-200 font-medium truncate">{file.name}</p>
+                      <p className="text-slate-500 text-xs">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <button type="button" onClick={() => setFile(null)} className="text-slate-400 hover:text-slate-200">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Quiz Details */}
             <div className="card space-y-4">
@@ -197,26 +253,11 @@ export default function GenerateFromPdf() {
               </h2>
               <div>
                 <label className="label">Quiz Title *</label>
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="e.g. JEE Mains 2024 Paper 1"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  required
-                />
+                <input className="input" type="text" placeholder="e.g. HTET CSE 2024" value={title} onChange={e => setTitle(e.target.value)} required />
               </div>
               <div>
                 <label className="label">Duration (minutes) *</label>
-                <input
-                  className="input"
-                  type="number"
-                  min={1}
-                  max={300}
-                  value={durationMinutes}
-                  onChange={e => setDurationMinutes(Number(e.target.value))}
-                  required
-                />
+                <input className="input" type="number" min={1} max={300} value={durationMinutes} onChange={e => setDurationMinutes(Number(e.target.value))} required />
               </div>
             </div>
 
@@ -226,42 +267,26 @@ export default function GenerateFromPdf() {
                 <Folder className="w-4 h-4 text-slate-400" />
                 Assign to Folders <span className="text-slate-500 font-normal text-sm">(Optional)</span>
               </h2>
-              {allFolders.length > 0 ? (
+              {allFolders.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {allFolders.map(f => (
                     <button
-                      key={f._id}
-                      type="button"
-                      onClick={() => toggleFolder(f._id)}
+                      key={f._id} type="button" onClick={() => toggleFolder(f._id)}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${selectedFolderIds.includes(f._id) ? 'bg-primary-500/20 border-primary-500/50 text-primary-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'}`}
-                    >
-                      {f.name}
-                    </button>
+                    >{f.name}</button>
                   ))}
                 </div>
-              ) : (
-                <p className="text-slate-500 text-sm mb-4">No folders exist yet.</p>
               )}
               <form onSubmit={handleCreateFolder} className="flex gap-2">
-                <input
-                  className="input flex-1 text-sm"
-                  type="text"
-                  placeholder="New folder name..."
-                  value={newFolderName}
-                  onChange={e => setNewFolderName(e.target.value)}
-                />
+                <input className="input flex-1 text-sm" type="text" placeholder="New folder name..." value={newFolderName} onChange={e => setNewFolderName(e.target.value)} />
                 <button type="submit" className="btn-secondary text-sm px-4 flex items-center gap-1.5" disabled={creatingFolder || !newFolderName.trim()}>
-                  <Plus className="w-3.5 h-3.5" />
-                  {creatingFolder ? 'Adding...' : 'Add'}
+                  <Plus className="w-3.5 h-3.5" />{creatingFolder ? 'Adding...' : 'Add'}
                 </button>
               </form>
             </div>
 
-            <button
-              type="submit"
-              className="btn-primary w-full flex items-center justify-center gap-2 py-3 text-base"
-              disabled={!file || !title.trim() || loading}
-            >
+            <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2 py-3 text-base"
+              disabled={(mode === 'text' ? !pastedText.trim() : !file) || !title.trim() || loading}>
               <Sparkles className="w-5 h-5" />
               Generate Quiz with AI
             </button>
