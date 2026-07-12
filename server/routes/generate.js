@@ -72,6 +72,23 @@ const callGeminiWithPdf = (base64Data, mimeType, prompt) => {
   });
 };
 
+// Helper: wait N milliseconds
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper: call Gemini with automatic retry on 429 (up to 3 attempts, 15s apart)
+const callGeminiWithRetry = async (base64Data, mimeType, prompt, maxRetries = 3) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const response = await callGeminiWithPdf(base64Data, mimeType, prompt);
+    if (response.statusCode !== 429) return response;
+    if (attempt < maxRetries) {
+      console.log(`Gemini 429 rate limit — retrying in 15s (attempt ${attempt}/${maxRetries})...`);
+      await sleep(15000);
+    }
+  }
+  // Return the last 429 response after exhausting retries
+  return { statusCode: 429, body: '' };
+};
+
 // POST /api/generate/from-pdf
 router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => {
   try {
@@ -109,14 +126,14 @@ Return this EXACT JSON structure:
 
     let geminiResponse;
     try {
-      geminiResponse = await callGeminiWithPdf(base64Pdf, 'application/pdf', prompt);
+      geminiResponse = await callGeminiWithRetry(base64Pdf, 'application/pdf', prompt);
     } catch (err) {
       return res.status(503).json({ message: 'Failed to reach AI service. Please check your connection and try again.' });
     }
 
     // Handle Gemini API errors
     if (geminiResponse.statusCode === 429) {
-      return res.status(429).json({ message: 'AI service is busy (rate limited). Please wait a moment and try again.' });
+      return res.status(429).json({ message: 'AI is rate-limited on the free tier. Please wait 1–2 minutes and try again.' });
     }
     if (geminiResponse.statusCode === 400) {
       return res.status(400).json({ message: 'The PDF could not be processed by the AI. It may be scanned/image-only or corrupted.' });

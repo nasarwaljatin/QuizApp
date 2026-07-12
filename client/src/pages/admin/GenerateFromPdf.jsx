@@ -78,7 +78,7 @@ export default function GenerateFromPdf() {
 
       const res = await api.post('/generate/from-pdf', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000 // 2 min timeout for Gemini processing
+        timeout: 180000 // 3 min timeout — allows server-side retry on rate limit
       });
 
       if (res.data.warning) {
