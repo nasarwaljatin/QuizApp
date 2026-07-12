@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const questionSchema = new mongoose.Schema({
   questionText: { type: String, required: true },
   options: [{ type: String, required: true }],
-  correctAnswer: { type: String, required: true }
+  correctAnswer: { type: String, required: false, default: '' }, // Optional for AI-generated drafts
+  language: { type: String, default: 'English' } // Language tag from Gemini extraction
 });
 
 const quizSchema = new mongoose.Schema({
@@ -14,7 +15,8 @@ const quizSchema = new mongoose.Schema({
   folderIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Folder' }],
   questions: [questionSchema],
   isPublished: { type: Boolean, default: false },
-  negativeMarkingPoints: { type: Number, default: 0, min: 0 }, // 0 = disabled, e.g. 0.25 = deduct 0.25 per wrong answer
+  isDraft: { type: Boolean, default: false }, // true for AI-generated quizzes pending answer-key setup
+  negativeMarkingPoints: { type: Number, default: 0, min: 0 },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

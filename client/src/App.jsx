@@ -13,6 +13,9 @@ import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ManageQuizzes from './pages/admin/ManageQuizzes';
 import ManageFolders from './pages/admin/ManageFolders';
+import GenerateFromPdf from './pages/admin/GenerateFromPdf';
+import AdminAnswerKey from './pages/admin/AdminAnswerKey';
+import AdminAnswerKeyReview from './pages/admin/AdminAnswerKeyReview';
 
 // ─── Protected Route Wrappers ─────────────────────────────────────────────────
 
@@ -57,6 +60,9 @@ function AppRoutes() {
       <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
       <Route path="/admin/quizzes" element={<RequireAdmin><ManageQuizzes /></RequireAdmin>} />
       <Route path="/admin/folders" element={<RequireAdmin><ManageFolders /></RequireAdmin>} />
+      <Route path="/admin/generate-from-pdf" element={<RequireAdmin><GenerateFromPdf /></RequireAdmin>} />
+      <Route path="/admin/quiz/:id/answer-key" element={<RequireAdmin><AdminAnswerKey /></RequireAdmin>} />
+      <Route path="/admin/quiz/:id/review" element={<RequireAdmin><AdminAnswerKeyReview /></RequireAdmin>} />
 
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />

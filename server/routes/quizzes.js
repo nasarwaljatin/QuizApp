@@ -136,4 +136,95 @@ router.delete('/:id', verifyAdmin, async (req, res) => {
   }
 });
 
+// GET /api/quizzes/admin/:id/for-answer-key — get draft quiz for admin self-attempt (NO correctAnswer exposed)
+router.get('/admin/:id/for-answer-key', verifyAdmin, async (req, res) => {
+  try {
+    const quiz = await Quiz.findById(req.params.id).lean();
+    if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
+
+    // Strip correctAnswer — admin will be setting them fresh
+    const safeQuiz = {
+      ...quiz,
+      questions: quiz.questions.map(({ questionText, options, language, _id }) => ({
+        _id,
+        questionText,
+        options,
+        language: language || 'English'
+      }))
+    };
+
+    res.json(safeQuiz);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error.', error: err.message });
+  }
+});
+
+// POST /api/quizzes/:id/set-answer-key — admin sets correct answers after self-attempt
+router.post('/:id/set-answer-key', verifyAdmin, async (req, res) => {
+  try {
+    const { answers, updatedQuestions } = req.body;
+    // answers: [{ questionId, correctAnswer }]
+    // updatedQuestions (optional): [{ _id, questionText, options }] — if admin edited questions
+
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
+
+    // Apply any edits to question text/options first
+    if (updatedQuestions && Array.isArray(updatedQuestions)) {
+      updatedQuestions.forEach(updQ => {
+        const q = quiz.questions.id(updQ._id);
+        if (q) {
+          if (updQ.questionText) q.questionText = updQ.questionText.trim();
+          if (updQ.options) q.options = updQ.options.map(o => o.trim());
+        }
+      });
+    }
+
+    // Apply correct answers
+    if (!answers || !Array.isArray(answers)) {
+      return res.status(400).json({ message: 'answers array is required.' });
+    }
+
+    answers.forEach(({ questionId, correctAnswer }) => {
+      const q = quiz.questions.id(questionId);
+      if (q && correctAnswer) {
+        q.correctAnswer = correctAnswer;
+      }
+    });
+
+    quiz.updatedAt = new Date();
+    await quiz.save();
+
+    res.json({ message: 'Answer key saved successfully.', quiz });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error.', error: err.message });
+  }
+});
+
+// POST /api/quizzes/:id/publish — finalize and publish a draft quiz
+router.post('/:id/publish', verifyAdmin, async (req, res) => {
+  try {
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
+
+    // Verify all questions have a correct answer set
+    const unanswered = quiz.questions.filter(q => !q.correctAnswer || !q.correctAnswer.trim());
+    if (unanswered.length > 0) {
+      return res.status(400).json({
+        message: `${unanswered.length} question(s) still have no correct answer set. Please complete the answer key before publishing.`
+      });
+    }
+
+    quiz.isPublished = true;
+    quiz.isDraft = false;
+    quiz.updatedAt = new Date();
+    await quiz.save();
+
+    res.json({ message: 'Quiz published successfully!', quiz });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error.', error: err.message });
+  }
+});
+
 module.exports = router;
+
