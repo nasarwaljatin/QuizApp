@@ -103,7 +103,16 @@ export default function GenerateFromPdf() {
         navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to generate quiz. Please try again.');
+      const code = err.response?.data?.errorCode;
+      if (code === 'RATE_LIMIT_RPM' || code === 'RATE_LIMIT_TPM') {
+        setError("Gemini is temporarily rate-limited — please wait a minute and try again.");
+      } else if (code === 'RATE_LIMIT_RPD') {
+        setError("Daily free-tier limit for Gemini reached. This resets in about 24 hours (Gemini's quota resets around midnight Pacific time). Try again tomorrow, or use a different Gemini API key/project in the meantime.");
+      } else if (code === 'INVALID_KEY') {
+        setError("Gemini API key is invalid or not authorized. Please check the GEMINI_API_KEY environment variable on Render.");
+      } else {
+        setError(err.response?.data?.message || 'Failed to generate quiz. Please try again.');
+      }
     } finally { setLoading(false); }
   };
 

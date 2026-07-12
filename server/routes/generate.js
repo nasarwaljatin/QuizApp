@@ -16,6 +16,42 @@ const upload = multer({
   }
 });
 
+// Helper: classify Gemini API errors based on status code and response body
+const classifyGeminiError = (statusCode, body) => {
+  if (statusCode === 403 || statusCode === 401) {
+    return { code: 'INVALID_KEY', message: 'Gemini API key is invalid or not authorized.' };
+  }
+
+  if (statusCode === 429) {
+    let message = 'Rate limit or quota exceeded.';
+    try {
+      const parsed = JSON.parse(body);
+      message = parsed?.error?.message || message;
+    } catch (e) {}
+
+    const lowerMsg = message.toLowerCase();
+    if (lowerMsg.includes('per day') || lowerMsg.includes('daily') || lowerMsg.includes('rpd')) {
+      return { code: 'RATE_LIMIT_RPD', message };
+    }
+    if (lowerMsg.includes('token') || lowerMsg.includes('tpm') || lowerMsg.includes('tokens per minute')) {
+      return { code: 'RATE_LIMIT_TPM', message };
+    }
+    // Default to RPM for transient requests rate limit
+    return { code: 'RATE_LIMIT_RPM', message };
+  }
+
+  let genericMessage = `API Error ${statusCode}`;
+  try {
+    const parsed = JSON.parse(body);
+    genericMessage = parsed?.error?.message || genericMessage;
+  } catch (e) {}
+
+  return { code: 'UNKNOWN_ERROR', message: genericMessage };
+};
+
+// Helper: wait N milliseconds
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // ── Shared Gemini caller ───────────────────────────────────────────────────────
 const callGemini = (parts) => {
   return new Promise((resolve, reject) => {
@@ -37,7 +73,7 @@ const callGemini = (parts) => {
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve({ statusCode: res.statusCode, body: data }));
+      res.on('end', () => resolve({ statusCode: res.statusCode, body: data, headers: res.headers }));
     });
     req.on('error', reject);
     req.write(requestBody);
@@ -45,31 +81,78 @@ const callGemini = (parts) => {
   });
 };
 
+// Helper: call Gemini with automatic retry for transient limits (RPM/TPM)
+const callGeminiWithRetry = async (parts) => {
+  let attempt = 0;
+  const maxRetries = 3;
+
+  while (true) {
+    let response;
+    try {
+      response = await callGemini(parts);
+    } catch (err) {
+      if (attempt < maxRetries) {
+        attempt++;
+        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+        console.warn(`[Gemini Request Failure] Network error, retrying in ${delay.toFixed(0)}ms (attempt ${attempt}/${maxRetries}):`, err.message);
+        await sleep(delay);
+        continue;
+      }
+      throw err;
+    }
+
+    if (response.statusCode === 200) {
+      return response;
+    }
+
+    const errorInfo = classifyGeminiError(response.statusCode, response.body);
+
+    // Logging requirement:
+    // Log the raw Gemini error response server-side (status code, error type, retry-after header if present)
+    const retryAfter = response.headers?.['retry-after'] || response.headers?.['x-retry-after'] || null;
+    console.error('[Gemini API Call Failed Log]', {
+      attempt,
+      statusCode: response.statusCode,
+      errorType: errorInfo.code,
+      message: errorInfo.message,
+      retryAfterHeader: retryAfter,
+      rawBody: response.body
+    });
+
+    const isTransient = errorInfo.code === 'RATE_LIMIT_RPM' || errorInfo.code === 'RATE_LIMIT_TPM';
+
+    if (isTransient && attempt < maxRetries) {
+      attempt++;
+      // Exponential backoff: 2s, 4s, 8s plus random jitter (e.g. 0-1s)
+      const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+      console.log(`[Gemini Transient Limit] Retrying in ${delay.toFixed(0)}ms (attempt ${attempt}/${maxRetries})...`);
+      await sleep(delay);
+      continue;
+    }
+
+    return response;
+  }
+};
+
 // ── Shared: handle Gemini response → validate → save quiz ─────────────────────
 const handleGeminiResponse = async (geminiResponse, { title, durationMinutes, parsedFolderIds, createdBy }, res) => {
-  if (geminiResponse.statusCode === 429) {
-    let msg = 'Gemini API quota exceeded.';
-    try { msg = JSON.parse(geminiResponse.body)?.error?.message || msg; } catch {}
-    return res.status(429).json({ message: `Quota hit: ${msg}. Please generate a new API key at aistudio.google.com/apikey and update GEMINI_API_KEY in Render.` });
-  }
-  if (geminiResponse.statusCode === 403 || geminiResponse.statusCode === 401) {
-    return res.status(500).json({ message: 'Gemini API key is invalid. Please check GEMINI_API_KEY in Render Environment Variables.' });
-  }
+  const errorInfo = classifyGeminiError(geminiResponse.statusCode, geminiResponse.body);
+
   if (geminiResponse.statusCode !== 200) {
-    let geminiErr = '';
-    try { geminiErr = JSON.parse(geminiResponse.body)?.error?.message || ''; } catch {}
-    console.error('Gemini error:', geminiResponse.statusCode, geminiResponse.body);
-    return res.status(500).json({ message: `AI error (${geminiResponse.statusCode}): ${geminiErr || 'Please try again.'}` });
+    return res.status(geminiResponse.statusCode === 429 ? 429 : 500).json({
+      errorCode: errorInfo.code,
+      message: errorInfo.message
+    });
   }
 
   let geminiData;
   try { geminiData = JSON.parse(geminiResponse.body); } catch {
-    return res.status(500).json({ message: 'Could not parse AI response. Please try again.' });
+    return res.status(500).json({ errorCode: 'PARSE_ERROR', message: 'Could not parse AI response.' });
   }
 
   const textContent = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!textContent) {
-    return res.status(500).json({ message: 'AI returned an empty response. Please try again.' });
+    return res.status(500).json({ errorCode: 'EMPTY_RESPONSE', message: 'AI returned an empty response. Please try again.' });
   }
 
   let extractedData;
@@ -77,7 +160,7 @@ const handleGeminiResponse = async (geminiResponse, { title, durationMinutes, pa
     const cleaned = textContent.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
     extractedData = JSON.parse(cleaned);
   } catch {
-    return res.status(422).json({ message: 'AI response was not valid JSON. Please try again.', rawResponse: textContent.substring(0, 300) });
+    return res.status(422).json({ errorCode: 'INVALID_JSON', message: 'AI response was not valid JSON. Please try again.', rawResponse: textContent.substring(0, 300) });
   }
 
   if (!extractedData.questions || !Array.isArray(extractedData.questions) || extractedData.questions.length === 0) {
@@ -156,7 +239,7 @@ router.post('/from-text', verifyAdmin, async (req, res) => {
 
     let geminiResponse;
     try {
-      geminiResponse = await callGemini([{ text: fullPrompt }]);
+      geminiResponse = await callGeminiWithRetry([{ text: fullPrompt }]);
     } catch (err) {
       return res.status(503).json({ message: 'Failed to reach AI service. Please try again.' });
     }
@@ -197,7 +280,7 @@ router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => 
         // Scanned/image PDF → send as base64 for vision
         console.log('Using base64 vision mode for scanned PDF');
         const base64Pdf = req.file.buffer.toString('base64');
-        geminiResponse = await callGemini([
+        geminiResponse = await callGeminiWithRetry([
           { inline_data: { mime_type: 'application/pdf', data: base64Pdf } },
           { text: EXTRACTION_PROMPT }
         ]);
@@ -205,7 +288,7 @@ router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => 
         // Text PDF → send extracted text only
         const trimmedText = pdfText.length > 60000 ? pdfText.slice(0, 60000) + '\n[...document continues...]' : pdfText;
         const fullPrompt = `${EXTRACTION_PROMPT}\n\nHere is the extracted PDF text:\n---\n${trimmedText}\n---`;
-        geminiResponse = await callGemini([{ text: fullPrompt }]);
+        geminiResponse = await callGeminiWithRetry([{ text: fullPrompt }]);
       }
     } catch (err) {
       return res.status(503).json({ message: 'Failed to reach AI service. Please try again.' });
