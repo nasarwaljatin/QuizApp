@@ -19,49 +19,69 @@ const upload = multer({
   }
 });
 
-// Helper: call Gemini API with plain text (NOT base64 PDF — much lower token usage)
+// Helper: call Gemini API with plain text (cheap — text-based PDFs)
 const callGeminiWithText = (textPrompt) => {
   return new Promise((resolve, reject) => {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return reject(new Error('GEMINI_API_KEY is not set on the server.'));
-    }
+    if (!apiKey) return reject(new Error('GEMINI_API_KEY is not set on the server.'));
 
     const requestBody = JSON.stringify({
-      contents: [
-        {
-          parts: [{ text: textPrompt }]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        response_mime_type: 'application/json'
-      }
+      contents: [{ parts: [{ text: textPrompt }] }],
+      generationConfig: { temperature: 0.1, response_mime_type: 'application/json' }
     });
 
     const options = {
       hostname: 'generativelanguage.googleapis.com',
       path: `/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(requestBody)
-      }
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody) }
     };
 
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        resolve({ statusCode: res.statusCode, body: data });
-      });
+      res.on('end', () => resolve({ statusCode: res.statusCode, body: data }));
     });
-
     req.on('error', reject);
     req.write(requestBody);
     req.end();
   });
 };
+
+// Helper: call Gemini API with inline base64 PDF (fallback for scanned/image PDFs)
+const callGeminiWithPdf = (base64Data, prompt) => {
+  return new Promise((resolve, reject) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return reject(new Error('GEMINI_API_KEY is not set on the server.'));
+
+    const requestBody = JSON.stringify({
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: 'application/pdf', data: base64Data } },
+          { text: prompt }
+        ]
+      }],
+      generationConfig: { temperature: 0.1, response_mime_type: 'application/json' }
+    });
+
+    const options = {
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody) }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve({ statusCode: res.statusCode, body: data }));
+    });
+    req.on('error', reject);
+    req.write(requestBody);
+    req.end();
+  });
+};
+
 
 // POST /api/generate/from-pdf
 router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => {
@@ -76,23 +96,28 @@ router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => 
       return res.status(400).json({ message: 'Quiz title and duration are required.' });
     }
 
-    // ── Step 1: Extract text from PDF locally (no token cost) ──────────────────
+    // ── Step 1: Try to extract text locally (cheap — no token cost) ────────────
     let pdfText = '';
+    let useBase64Fallback = false;
+
     try {
-      const pdfData = await pdfParse(req.file.buffer);
+      const pdfData = await pdfParse(req.file.buffer, { max: 0 });
       pdfText = pdfData.text || '';
     } catch (err) {
-      return res.status(400).json({ message: 'Could not read this PDF. It may be corrupted or password-protected.' });
+      // pdf-parse failed — likely a scanned/image PDF, fall back to Gemini vision
+      console.log('pdf-parse failed, falling back to base64 mode:', err.message);
+      useBase64Fallback = true;
     }
 
-    if (!pdfText.trim() || pdfText.trim().length < 50) {
-      return res.status(422).json({
-        message: 'No readable text found in this PDF. It appears to be a scanned/image-only PDF. Please use a PDF with selectable text.'
-      });
+    // If pdf-parse succeeded but returned no meaningful text, also use base64 fallback
+    if (!useBase64Fallback && pdfText.trim().length < 50) {
+      console.log('pdf-parse returned no text, falling back to base64 mode');
+      useBase64Fallback = true;
     }
 
     // Trim text to avoid exceeding token limits (keep first ~60,000 chars ≈ ~15,000 tokens)
     const trimmedText = pdfText.length > 60000 ? pdfText.slice(0, 60000) + '\n[...document continues...]' : pdfText;
+
 
     // ── Step 2: Send extracted TEXT to Gemini (tiny token usage) ───────────────
     const prompt = `You are an expert quiz extractor. The following is text extracted from a PDF exam paper.
@@ -125,10 +150,38 @@ ${trimmedText}
 
     let geminiResponse;
     try {
-      geminiResponse = await callGeminiWithText(prompt);
+      if (useBase64Fallback) {
+        // Scanned/image PDF — send as base64 so Gemini can visually read it
+        console.log('Using base64 vision mode for scanned PDF');
+        const base64Pdf = req.file.buffer.toString('base64');
+        const visionPrompt = `You are an expert quiz extractor. Extract ALL multiple-choice questions from this PDF document.
+
+STRICT RULES:
+1. Return ONLY valid JSON — no markdown, no prose, no code blocks, no explanation.
+2. Do NOT determine or guess the correct answer. Leave correct answers completely out.
+3. Each question MUST have at least 2 options and at most 6 options.
+4. Detect the language of each question (e.g. "English", "Hindi", "Gujarati") and include it in the language field.
+5. If the question has an image/diagram that cannot be extracted, skip it.
+
+Return this EXACT JSON structure:
+{
+  "questions": [
+    {
+      "questionText": "full question text here",
+      "options": ["option A text", "option B text", "option C text", "option D text"],
+      "language": "English"
+    }
+  ]
+}`;
+        geminiResponse = await callGeminiWithPdf(base64Pdf, visionPrompt);
+      } else {
+        // Text-based PDF — send extracted text only (cheap)
+        geminiResponse = await callGeminiWithText(prompt);
+      }
     } catch (err) {
       return res.status(503).json({ message: 'Failed to reach AI service. Please try again.' });
     }
+
 
     // Handle Gemini API errors
     if (geminiResponse.statusCode === 429) {
