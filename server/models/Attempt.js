@@ -6,7 +6,7 @@ const attemptSchema = new mongoose.Schema({
   answers: [
     {
       questionText: { type: String, required: true },
-      selectedAnswer: { type: String, required: true },
+      selectedAnswer: { type: String, default: '' },
       correctAnswer: { type: String, required: true },
       isCorrect: { type: Boolean, required: true }
     }

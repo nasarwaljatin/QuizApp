@@ -8,11 +8,14 @@ import { useState, useEffect, useRef } from 'react';
  */
 export function useTimer(durationSeconds, active = true) {
   const [timeLeft, setTimeLeft] = useState(durationSeconds);
+  const [prevDuration, setPrevDuration] = useState(durationSeconds);
   const intervalRef = useRef(null);
 
-  useEffect(() => {
+  if (durationSeconds !== prevDuration) {
     setTimeLeft(durationSeconds);
-  }, [durationSeconds]);
+    setPrevDuration(durationSeconds);
+  }
+
 
   useEffect(() => {
     if (!active || timeLeft <= 0) {
