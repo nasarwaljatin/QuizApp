@@ -1,0 +1,82 @@
+import { Trophy, CheckCircle, XCircle, Clock, Zap } from 'lucide-react';
+
+export default function ResultSummary({ attempt, quizTitle }) {
+  const percentage = attempt.totalQuestions > 0
+    ? Math.round((attempt.score / attempt.totalQuestions) * 100)
+    : 0;
+
+  const minutes = Math.floor(attempt.timeTakenSeconds / 60);
+  const seconds = attempt.timeTakenSeconds % 60;
+  const timeStr = `${minutes}m ${seconds}s`;
+
+  const wrongCount = attempt.totalQuestions - attempt.score;
+
+  let grade = { label: 'Excellent!', color: 'text-emerald-400', bg: 'bg-emerald-500/20', border: 'border-emerald-500/30' };
+  if (percentage < 40) grade = { label: 'Needs Work', color: 'text-red-400', bg: 'bg-red-500/20', border: 'border-red-500/30' };
+  else if (percentage < 70) grade = { label: 'Good Effort', color: 'text-amber-400', bg: 'bg-amber-500/20', border: 'border-amber-500/30' };
+  else if (percentage < 90) grade = { label: 'Great Job!', color: 'text-blue-400', bg: 'bg-blue-500/20', border: 'border-blue-500/30' };
+
+  return (
+    <div className="card text-center">
+      {/* Trophy */}
+      <div className="flex justify-center mb-4">
+        <div className={`w-20 h-20 rounded-full ${grade.bg} border ${grade.border} flex items-center justify-center`}>
+          <Trophy className={`w-10 h-10 ${grade.color}`} />
+        </div>
+      </div>
+
+      {/* Grade label */}
+      <p className={`text-sm font-semibold uppercase tracking-widest ${grade.color} mb-1`}>{grade.label}</p>
+
+      {/* Quiz title */}
+      <h2 className="text-2xl font-bold text-slate-100 mb-6">{quizTitle}</h2>
+
+      {/* Score circle */}
+      <div className="flex justify-center mb-6">
+        <div className="relative w-32 h-32">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="#1e293b" strokeWidth="10" />
+            <circle
+              cx="60" cy="60" r="52" fill="none"
+              stroke={percentage >= 70 ? '#10b981' : percentage >= 40 ? '#f59e0b' : '#ef4444'}
+              strokeWidth="10"
+              strokeDasharray={`${2 * Math.PI * 52}`}
+              strokeDashoffset={`${2 * Math.PI * 52 * (1 - percentage / 100)}`}
+              strokeLinecap="round"
+              className="transition-all duration-1000"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-3xl font-bold text-slate-100">{percentage}%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="bg-slate-800 rounded-xl p-3">
+          <CheckCircle className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
+          <p className="text-2xl font-bold text-emerald-400">{attempt.score}</p>
+          <p className="text-xs text-slate-500">Correct</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-3">
+          <XCircle className="w-5 h-5 text-red-400 mx-auto mb-1" />
+          <p className="text-2xl font-bold text-red-400">{wrongCount}</p>
+          <p className="text-xs text-slate-500">Wrong</p>
+        </div>
+        <div className="bg-slate-800 rounded-xl p-3">
+          <Clock className="w-5 h-5 text-primary-400 mx-auto mb-1" />
+          <p className="text-lg font-bold text-primary-400">{timeStr}</p>
+          <p className="text-xs text-slate-500">Time Taken</p>
+        </div>
+      </div>
+
+      {attempt.autoSubmitted && (
+        <div className="flex items-center gap-2 justify-center bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2 text-amber-400 text-sm">
+          <Zap className="w-4 h-4" />
+          Auto-submitted when time ran out
+        </div>
+      )}
+    </div>
+  );
+}
