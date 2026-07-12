@@ -70,7 +70,7 @@ router.get('/admin/:id', verifyAdmin, async (req, res) => {
 // POST /api/quizzes — create quiz
 router.post('/', verifyAdmin, async (req, res) => {
   try {
-    const { title, description, durationMinutes, questions, isPublished } = req.body;
+    const { title, description, durationMinutes, questions, isPublished, negativeMarkingPoints } = req.body;
 
     if (!title || !durationMinutes || !questions || questions.length === 0) {
       return res.status(400).json({ message: 'Title, duration, and at least one question are required.' });
@@ -82,6 +82,7 @@ router.post('/', verifyAdmin, async (req, res) => {
       durationMinutes,
       questions,
       isPublished: isPublished || false,
+      negativeMarkingPoints: negativeMarkingPoints || 0,
       createdBy: req.user.id
     });
 
@@ -95,7 +96,7 @@ router.post('/', verifyAdmin, async (req, res) => {
 // PUT /api/quizzes/:id — update quiz
 router.put('/:id', verifyAdmin, async (req, res) => {
   try {
-    const { title, description, durationMinutes, questions, isPublished } = req.body;
+    const { title, description, durationMinutes, questions, isPublished, negativeMarkingPoints } = req.body;
 
     const quiz = await Quiz.findById(req.params.id);
     if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
@@ -105,6 +106,7 @@ router.put('/:id', verifyAdmin, async (req, res) => {
     if (durationMinutes !== undefined) quiz.durationMinutes = durationMinutes;
     if (questions !== undefined) quiz.questions = questions;
     if (isPublished !== undefined) quiz.isPublished = isPublished;
+    if (negativeMarkingPoints !== undefined) quiz.negativeMarkingPoints = negativeMarkingPoints;
     quiz.updatedAt = new Date();
 
     await quiz.save();
