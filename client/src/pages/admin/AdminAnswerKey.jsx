@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ShieldCheck, Check, Edit3, Save, X, ChevronDown, ChevronUp, Globe, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Check, Edit3, Save, X, ChevronDown, ChevronUp, Globe, AlertTriangle, Sparkles } from 'lucide-react';
 import api from '../../api/axios';
 import ThemeToggle from '../../components/ThemeToggle';
 
@@ -19,12 +19,24 @@ export default function AdminAnswerKey() {
   const [editBuffer, setEditBuffer] = useState({}); // { questionText, options: [...] }
   const [expandedIndex, setExpandedIndex] = useState(null);
 
+  // Parse newOnly query parameter
+  const queryParams = new URLSearchParams(window.location.search);
+  const newOnly = queryParams.get('newOnly') === 'true';
+
+  const [totalQuestionsCount, setTotalQuestionsCount] = useState(0);
+  const [answeredQuestionsCount, setAnsweredQuestionsCount] = useState(0);
+
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await api.get(`/quizzes/admin/${id}/for-answer-key`);
+        const url = newOnly
+          ? `/quizzes/admin/${id}/for-answer-key?newOnly=true`
+          : `/quizzes/admin/${id}/for-answer-key`;
+        const res = await api.get(url);
         setQuiz(res.data);
         setQuestions(res.data.questions);
+        setTotalQuestionsCount(res.data.totalQuestionsCount || res.data.questions.length);
+        setAnsweredQuestionsCount(res.data.answeredQuestionsCount || 0);
         setExpandedIndex(0);
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to load quiz.');
@@ -33,7 +45,7 @@ export default function AdminAnswerKey() {
       }
     };
     load();
-  }, [id]);
+  }, [id, newOnly]);
 
   // Derive unique languages
   const languages = ['all', ...Array.from(new Set(questions.map(q => q.language || 'English')))];
@@ -168,7 +180,19 @@ export default function AdminAnswerKey() {
       </div>
 
       {/* Info banner */}
-      <div className="max-w-3xl mx-auto px-4 pt-5 mb-4">
+      <div className="max-w-3xl mx-auto px-4 pt-5 mb-4 space-y-3">
+        {newOnly && (
+          <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl px-4 py-3 text-sm text-violet-300 flex items-start gap-2.5">
+            <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0 text-violet-400 animate-pulse" />
+            <div>
+              <p className="font-semibold text-slate-100">Setting answer key for new questions only</p>
+              <p className="text-violet-300/90 text-xs mt-0.5">
+                Showing <strong>{questions.length}</strong> newly added questions. 
+                There are <strong>{answeredQuestionsCount}</strong> existing questions that already have answers set.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-sm text-amber-300 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <span>

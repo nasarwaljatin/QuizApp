@@ -470,4 +470,259 @@ router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => 
   }
 });
 
+// ── POST /api/generate/add-to-quiz/:quizId — add AI questions to existing quiz ──
+router.post('/add-to-quiz/:quizId', verifyAdmin, upload.single('pdf'), async (req, res) => {
+  try {
+    const quiz = await Quiz.findById(req.params.quizId);
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found.' });
+    }
+
+    if (!process.env.NVIDIA_API_KEY) {
+      return res.status(401).json({
+        errorCode: 'INVALID_KEY',
+        message: 'NVIDIA_API_KEY is not set on the server.'
+      });
+    }
+
+    // PDF Mode
+    if (req.file) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+
+      const sendProgress = (message) => {
+        res.write(`data: ${JSON.stringify({ type: 'progress', message })}\n\n`);
+      };
+
+      const sendError = (statusCode, errorCode, message) => {
+        res.write(`data: ${JSON.stringify({ type: 'error', statusCode, errorCode, message })}\n\n`);
+        res.end();
+      };
+
+      sendProgress('Converting PDF to images...');
+
+      let pageImages = [];
+      try {
+        const rawImages = await pdfToImg(req.file.buffer, { scale: 1.5, imgType: 'png' });
+        pageImages = Array.isArray(rawImages) ? rawImages : [rawImages];
+      } catch (err) {
+        console.error('PDF-to-images conversion error:', err);
+        return sendError(500, 'CONVERSION_ERROR', 'Failed to convert PDF to images: ' + err.message);
+      }
+
+      if (pageImages.length === 0) {
+        return sendError(400, 'EMPTY_PDF', 'The PDF contains no pages.');
+      }
+
+      sendProgress(`PDF converted. Found ${pageImages.length} page(s). Starting extraction...`);
+
+      const allQuestions = [];
+      const failedPages = [];
+
+      for (let i = 0; i < pageImages.length; i++) {
+        sendProgress(`Processing page ${i + 1} of ${pageImages.length}...`);
+
+        try {
+          const dataUrl = pageImages[i];
+          const base64Data = dataUrl.split(',')[1] || dataUrl;
+
+          // Step A: Call NVIDIA Nemotron OCR
+          const ocrMessages = [
+            {
+              role: "user",
+              content: `Perform OCR on this image. Return only the raw text, preserving the content of questions and options. <img src="data:image/png;base64,${base64Data}" />`
+            }
+          ];
+
+          const ocrResponse = await callNvidiaNIMWithRetry('nvidia/nemotron-ocr-v2', ocrMessages, 4096);
+
+          if (ocrResponse.statusCode !== 200) {
+            const errorInfo = classifyNvidiaError(ocrResponse.statusCode, ocrResponse.body);
+            if (errorInfo.code === 'INVALID_KEY') {
+              return sendError(401, 'INVALID_KEY', 'NVIDIA API key is invalid or unauthorized.');
+            }
+            if (errorInfo.code === 'RATE_LIMIT_RPD') {
+              return sendError(429, 'RATE_LIMIT_RPD', 'Daily quota for NVIDIA NIM reached.');
+            }
+            failedPages.push(i + 1);
+            continue;
+          }
+
+          const ocrResult = JSON.parse(ocrResponse.body);
+          const pageText = ocrResult?.choices?.[0]?.message?.content;
+
+          if (!pageText || pageText.trim().length < 10) {
+            failedPages.push(i + 1);
+            continue;
+          }
+
+          // Step B: Call Llama 3.1 Instruct to structure questions
+          const chatMessages = [
+            {
+              role: "system",
+              content: "You are an expert system that extracts multiple-choice questions from raw OCR text and formats them as strict JSON."
+            },
+            {
+              role: "user",
+              content: `${EXTRACTION_PROMPT}\n\nHere is the raw OCR text from page ${i + 1}:\n---\n${pageText}\n---`
+            }
+          ];
+
+          const chatResponse = await callNvidiaNIMWithRetry('meta/llama-3.1-70b-instruct', chatMessages, 2048);
+
+          if (chatResponse.statusCode !== 200) {
+            const errorInfo = classifyNvidiaError(chatResponse.statusCode, chatResponse.body);
+            if (errorInfo.code === 'INVALID_KEY') {
+              return sendError(401, 'INVALID_KEY', 'NVIDIA API key is invalid or unauthorized.');
+            }
+            if (errorInfo.code === 'RATE_LIMIT_RPD') {
+              return sendError(429, 'RATE_LIMIT_RPD', 'Daily quota for NVIDIA NIM reached.');
+            }
+            failedPages.push(i + 1);
+            continue;
+          }
+
+          const chatResult = JSON.parse(chatResponse.body);
+          const contentText = chatResult?.choices?.[0]?.message?.content;
+
+          if (!contentText) {
+            failedPages.push(i + 1);
+            continue;
+          }
+
+          let extractedData;
+          try {
+            const cleaned = contentText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+            extractedData = JSON.parse(cleaned);
+          } catch {
+            failedPages.push(i + 1);
+            continue;
+          }
+
+          if (extractedData?.questions && Array.isArray(extractedData.questions)) {
+            extractedData.questions.forEach(q => {
+              if (
+                q.questionText && typeof q.questionText === 'string' && q.questionText.trim() &&
+                Array.isArray(q.options) && q.options.length >= 2 &&
+                q.options.every(o => typeof o === 'string' && o.trim())
+              ) {
+                allQuestions.push({
+                  questionText: q.questionText.trim(),
+                  options: q.options.map(o => o.trim()),
+                  language: q.language || 'English',
+                  correctAnswer: ''
+                });
+              }
+            });
+          }
+        } catch (pageErr) {
+          console.error(`[Page ${i + 1}] Add questions extraction error:`, pageErr);
+          failedPages.push(i + 1);
+        }
+      }
+
+      if (allQuestions.length === 0) {
+        let failMsg = 'No questions could be extracted from the PDF.';
+        if (failedPages.length > 0) {
+          failMsg += ` (Failed on pages: ${failedPages.join(', ')})`;
+        }
+        return sendError(422, 'EXTRACTION_FAILED', failMsg);
+      }
+
+      quiz.questions.push(...allQuestions);
+      quiz.isPublished = false;
+      quiz.isDraft = true;
+      await quiz.save();
+
+      let warningMsg = null;
+      if (failedPages.length > 0) {
+        warningMsg = `Questions added, but some pages failed: ${failedPages.join(', ')}`;
+      }
+
+      res.write(`data: ${JSON.stringify({ type: 'success', quiz, extractedCount: allQuestions.length, warning: warningMsg })}\n\n`);
+      res.end();
+
+    } else {
+      // Text Mode
+      const { text } = req.body;
+      if (!text || !text.trim() || text.trim().length < 20) {
+        return res.status(400).json({ message: 'Please provide the question text.' });
+      }
+
+      const trimmedText = text.length > 60000 ? text.slice(0, 60000) + '\n[...text continues...]' : text;
+
+      const chatMessages = [
+        {
+          role: "system",
+          content: "You are an expert system that extracts multiple-choice questions from raw text and formats them as strict JSON."
+        },
+        {
+          role: "user",
+          content: `${EXTRACTION_PROMPT}\n\nHere is the question text:\n---\n${trimmedText}\n---`
+        }
+      ];
+
+      const nimResponse = await callNvidiaNIMWithRetry('meta/llama-3.1-70b-instruct', chatMessages, 2048);
+
+      if (nimResponse.statusCode !== 200) {
+        const errorInfo = classifyNvidiaError(nimResponse.statusCode, nimResponse.body);
+        return res.status(nimResponse.statusCode === 429 ? 429 : 500).json({
+          errorCode: errorInfo.code,
+          message: errorInfo.message
+        });
+      }
+
+      const textContent = JSON.parse(nimResponse.body)?.choices?.[0]?.message?.content;
+      if (!textContent) {
+        return res.status(500).json({ errorCode: 'EMPTY_RESPONSE', message: 'AI returned empty response.' });
+      }
+
+      let extractedData;
+      try {
+        const cleaned = textContent.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+        extractedData = JSON.parse(cleaned);
+      } catch {
+        return res.status(422).json({ errorCode: 'INVALID_JSON', message: 'AI response was not valid JSON.' });
+      }
+
+      if (!extractedData.questions || !Array.isArray(extractedData.questions) || extractedData.questions.length === 0) {
+        return res.status(422).json({ message: 'No questions could be extracted.' });
+      }
+
+      const validQuestions = extractedData.questions.filter(q =>
+        q.questionText && typeof q.questionText === 'string' && q.questionText.trim() &&
+        Array.isArray(q.options) && q.options.length >= 2 &&
+        q.options.every(o => typeof o === 'string' && o.trim())
+      ).map(q => ({
+        questionText: q.questionText.trim(),
+        options: q.options.map(o => o.trim()),
+        language: q.language || 'English',
+        correctAnswer: ''
+      }));
+
+      if (validQuestions.length === 0) {
+        return res.status(422).json({ message: 'All extracted questions failed validation.' });
+      }
+
+      quiz.questions.push(...validQuestions);
+      quiz.isPublished = false;
+      quiz.isDraft = true;
+      await quiz.save();
+
+      return res.status(201).json({ quiz, extractedCount: validQuestions.length, warning: null });
+    }
+  } catch (err) {
+    console.error('Add questions error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Server error.', error: err.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', statusCode: 500, errorCode: 'SERVER_ERROR', message: err.message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
 module.exports = router;

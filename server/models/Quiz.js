@@ -16,7 +16,14 @@ const quizSchema = new mongoose.Schema({
   questions: [questionSchema],
   isPublished: { type: Boolean, default: false },
   isDraft: { type: Boolean, default: false }, // true for AI-generated quizzes pending answer-key setup
+  negativeMarking: { type: Boolean, default: false },
   negativeMarkingPoints: { type: Number, default: 0, min: 0 },
+  shuffleQuestions: { type: Boolean, default: true },
+  shuffleOptions: { type: Boolean, default: true },
+  allowMultipleAttempts: { type: Boolean, default: false },
+  showCorrectAnswersAfterSubmit: { type: Boolean, default: true },
+  randomizeQuestionSubset: { type: Boolean, default: false },
+  subsetSize: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

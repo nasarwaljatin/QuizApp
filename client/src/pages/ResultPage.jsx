@@ -193,14 +193,22 @@ export default function ResultPage() {
         </div>
 
         {/* Answer review */}
-        <div>
-          <h2 className="text-xl font-bold text-slate-100 mb-4">Answer Review</h2>
-          <div className="space-y-4">
-            {attempt.answers.map((ans, i) => (
-              <QuestionReview key={i} answer={ans} index={i} />
-            ))}
+        {attempt.showCorrectAnswersAfterSubmit !== false ? (
+          <div>
+            <h2 className="text-xl font-bold text-slate-100 mb-4">Answer Review</h2>
+            <div className="space-y-4">
+              {attempt.answers.map((ans, i) => (
+                <QuestionReview key={i} answer={ans} index={i} />
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="card border border-slate-800 bg-slate-900/30 text-center py-6">
+            <p className="text-slate-400 text-sm">
+              The instructor has disabled correct answer review for this quiz attempt.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -13,7 +13,19 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
   const [description, setDescription] = useState(initialData?.description || '');
   const [durationMinutes, setDurationMinutes] = useState(initialData?.durationMinutes || 10);
   const [isPublished, setIsPublished] = useState(initialData?.isPublished || false);
-  const [negativeMarkingPoints, setNegativeMarkingPoints] = useState(initialData?.negativeMarkingPoints ?? 0);
+  
+  // Settings states
+  const [negativeMarking, setNegativeMarking] = useState(
+    initialData?.negativeMarking ?? (initialData?.negativeMarkingPoints > 0 ? true : false)
+  );
+  const [negativeMarkingPoints, setNegativeMarkingPoints] = useState(initialData?.negativeMarkingPoints ?? 0.25);
+  const [shuffleQuestions, setShuffleQuestions] = useState(initialData?.shuffleQuestions ?? true);
+  const [shuffleOptions, setShuffleOptions] = useState(initialData?.shuffleOptions ?? true);
+  const [allowMultipleAttempts, setAllowMultipleAttempts] = useState(initialData?.allowMultipleAttempts ?? false);
+  const [showCorrectAnswersAfterSubmit, setShowCorrectAnswersAfterSubmit] = useState(initialData?.showCorrectAnswersAfterSubmit ?? true);
+  const [randomizeQuestionSubset, setRandomizeQuestionSubset] = useState(initialData?.randomizeQuestionSubset ?? false);
+  const [subsetSize, setSubsetSize] = useState(initialData?.subsetSize || 10);
+
   const [questions, setQuestions] = useState(
     initialData?.questions?.length > 0
       ? initialData.questions
@@ -120,8 +132,44 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
         alert(`Question ${i + 1} has no correct answer selected.`); return;
       }
     }
-    onSubmit({ title, description, durationMinutes: Number(durationMinutes), isPublished, negativeMarkingPoints: Number(negativeMarkingPoints), folderIds: selectedFolderIds, questions });
+
+    if (randomizeQuestionSubset && (Number(subsetSize) <= 0 || Number(subsetSize) > questions.length)) {
+      alert(`Question subset size must be between 1 and the total questions count (${questions.length}).`);
+      return;
+    }
+
+    onSubmit({
+      title,
+      description,
+      durationMinutes: Number(durationMinutes),
+      isPublished,
+      negativeMarking,
+      negativeMarkingPoints: negativeMarking ? Number(negativeMarkingPoints) : 0,
+      shuffleQuestions,
+      shuffleOptions,
+      allowMultipleAttempts,
+      showCorrectAnswersAfterSubmit,
+      randomizeQuestionSubset,
+      subsetSize: randomizeQuestionSubset ? Number(subsetSize) : 0,
+      folderIds: selectedFolderIds,
+      questions
+    });
   };
+
+  const FormToggle = ({ checked, onChange, label, description }) => (
+    <div className="flex items-start justify-between py-3 border-b border-slate-800/60 last:border-0">
+      <div className="flex-1 pr-4">
+        <label className="text-sm font-semibold text-slate-200 block">{label}</label>
+        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+      </div>
+      <div
+        onClick={() => onChange(!checked)}
+        className={`w-11 h-6 rounded-full transition-all duration-300 flex items-center px-1 cursor-pointer flex-shrink-0 ${checked ? 'bg-primary-500' : 'bg-slate-700'}`}
+      >
+        <div className={`w-4 h-4 rounded-full bg-white transition-transform duration-300 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+      </div>
+    </div>
+  );
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -136,32 +184,11 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
           <label className="label">Description</label>
           <textarea className="input resize-none" rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional description..." />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Duration (minutes) *</label>
-            <input className="input" type="number" min={1} max={180} value={durationMinutes} onChange={e => setDurationMinutes(e.target.value)} required />
-          </div>
-          <div>
-            <label className="label">Negative Marking (points per wrong answer)</label>
-            <div className="relative">
-              <input
-                className="input pr-16"
-                type="number"
-                min={0}
-                max={10}
-                step={0.25}
-                value={negativeMarkingPoints}
-                onChange={e => setNegativeMarkingPoints(e.target.value)}
-                placeholder="0 = disabled"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 pointer-events-none">
-                {Number(negativeMarkingPoints) > 0 ? `−${negativeMarkingPoints} pts` : 'OFF'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">e.g. 0.25 → deduct ¼ pt per wrong answer. 0 = no penalty.</p>
-          </div>
+        <div>
+          <label className="label">Duration (minutes) *</label>
+          <input className="input" type="number" min={1} max={180} value={durationMinutes} onChange={e => setDurationMinutes(e.target.value)} required />
         </div>
-        <div className="flex items-center">
+        <div className="flex items-center pt-2">
           <label className="flex items-center gap-3 cursor-pointer">
             <div
               onClick={() => setIsPublished(!isPublished)}
@@ -225,6 +252,92 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
             >
               Add
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Quiz Settings Panel */}
+      <div className="card space-y-4">
+        <h3 className="text-lg font-semibold text-slate-100">Quiz Settings</h3>
+        <div className="divide-y divide-slate-800">
+          <FormToggle
+            checked={shuffleQuestions}
+            onChange={setShuffleQuestions}
+            label="Shuffle Questions"
+            description="Randomize question order for each student attempt."
+          />
+          <FormToggle
+            checked={shuffleOptions}
+            onChange={setShuffleOptions}
+            label="Shuffle Options"
+            description="Randomize option order within each question."
+          />
+          <FormToggle
+            checked={allowMultipleAttempts}
+            onChange={setAllowMultipleAttempts}
+            label="Allow Multiple Attempts"
+            description="Let students retake this quiz. If disabled, only their first attempt counts."
+          />
+          <FormToggle
+            checked={showCorrectAnswersAfterSubmit}
+            onChange={setShowCorrectAnswersAfterSubmit}
+            label="Show Answers After Submission"
+            description="Students will see the correct answers and explanations on their result page immediately."
+          />
+          
+          <div className="py-3">
+            <FormToggle
+              checked={negativeMarking}
+              onChange={setNegativeMarking}
+              label="Enable Negative Marking"
+              description="Deduct marks for incorrect answers."
+            />
+            {negativeMarking && (
+              <div className="mt-3 pl-4 border-l-2 border-primary-500/50 animate-fade-in">
+                <label className="label text-xs">Penalty points per wrong answer</label>
+                <div className="relative max-w-[200px]">
+                  <input
+                    className="input pr-12 text-sm py-1.5"
+                    type="number"
+                    min={0.1}
+                    max={10}
+                    step={0.25}
+                    value={negativeMarkingPoints}
+                    onChange={e => setNegativeMarkingPoints(e.target.value)}
+                    required={negativeMarking}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 pointer-events-none">
+                    points
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="py-3 last:pb-0">
+            <FormToggle
+              checked={randomizeQuestionSubset}
+              onChange={setRandomizeQuestionSubset}
+              label="Deliver Random Question Subset"
+              description="Deliver a random subset of questions from the pool to each student."
+            />
+            {randomizeQuestionSubset && (
+              <div className="mt-3 pl-4 border-l-2 border-primary-500/50 animate-fade-in">
+                <label className="label text-xs">Number of questions per student</label>
+                <div className="relative max-w-[200px]">
+                  <input
+                    className="input text-sm py-1.5"
+                    type="number"
+                    min={1}
+                    max={questions.length}
+                    value={subsetSize}
+                    onChange={e => setSubsetSize(e.target.value)}
+                    required={randomizeQuestionSubset}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">Pool has {questions.length} question(s) total.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

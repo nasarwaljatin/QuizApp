@@ -40,7 +40,7 @@ router.post('/', verifyStudent, async (req, res) => {
     // Wrong = answered incorrectly (blank/unanswered answers are NOT penalised)
     const wrongCount = detailedAnswers.filter(a => !a.isCorrect && a.selectedAnswer !== '').length;
 
-    const penalty = quiz.negativeMarkingPoints || 0;
+    const penalty = quiz.negativeMarking ? (quiz.negativeMarkingPoints || 0) : 0;
     const negativeMarksDeducted = parseFloat((wrongCount * penalty).toFixed(4));
     const rawScore = correctCount - negativeMarksDeducted;
     const score = Math.max(0, parseFloat(rawScore.toFixed(4))); // never below 0
@@ -51,8 +51,8 @@ router.post('/', verifyStudent, async (req, res) => {
       answers: detailedAnswers,
       score,
       negativeMarksDeducted,
-      totalQuestions: quiz.questions.length,
-      totalMarks: quiz.questions.length,
+      totalQuestions: answers.length,
+      totalMarks: answers.length,
       timeTakenSeconds,
       autoSubmitted: autoSubmitted || false
     });
@@ -181,9 +181,25 @@ router.get('/my/analytics', verifyStudent, async (req, res) => {
 router.get('/my/:attemptId', verifyStudent, async (req, res) => {
   try {
     const attempt = await Attempt.findOne({ _id: req.params.attemptId, studentId: req.user.id })
-      .populate('quizId', 'title durationMinutes');
+      .populate('quizId', 'title durationMinutes showCorrectAnswersAfterSubmit');
     if (!attempt) return res.status(404).json({ message: 'Attempt not found.' });
-    res.json(formatAttemptResponse(attempt));
+    
+    const attemptObj = formatAttemptResponse(attempt);
+    
+    const showAnswers = attempt.quizId ? attempt.quizId.showCorrectAnswersAfterSubmit : true;
+    if (showAnswers === false) {
+      attemptObj.answers = attemptObj.answers.map(ans => ({
+        questionText: ans.questionText,
+        selectedAnswer: ans.selectedAnswer,
+        correctAnswer: '',
+        isCorrect: false
+      }));
+      attemptObj.showCorrectAnswersAfterSubmit = false;
+    } else {
+      attemptObj.showCorrectAnswersAfterSubmit = true;
+    }
+
+    res.json(attemptObj);
   } catch (err) {
     res.status(500).json({ message: 'Server error.', error: err.message });
   }

@@ -7,6 +7,11 @@ import ThemeToggle from '../../components/ThemeToggle';
 export default function GenerateFromPdf() {
   const navigate = useNavigate();
 
+  // Query parameter for adding questions to an existing quiz
+  const queryParams = new URLSearchParams(window.location.search);
+  const addToQuizId = queryParams.get('addTo');
+  const [targetQuiz, setTargetQuiz] = useState(null);
+
   // Tab: 'text' | 'pdf'
   const [mode, setMode] = useState('text');
 
@@ -33,7 +38,19 @@ export default function GenerateFromPdf() {
 
   useEffect(() => {
     api.get('/folders').then(res => setAllFolders(res.data)).catch(() => {});
-  }, []);
+    
+    if (addToQuizId) {
+      api.get(`/quizzes/admin/${addToQuizId}`)
+        .then(res => {
+          setTargetQuiz(res.data);
+          setTitle(res.data.title);
+        })
+        .catch(err => {
+          console.error('Failed to load target quiz:', err);
+          setError('Failed to load existing quiz details.');
+        });
+    }
+  }, [addToQuizId]);
 
   const handleFileDrop = (e) => {
     e.preventDefault(); setDragging(false);
@@ -66,7 +83,7 @@ export default function GenerateFromPdf() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!title.trim()) return setError('Please enter a quiz title.');
+    if (!addToQuizId && !title.trim()) return setError('Please enter a quiz title.');
 
     if (mode === 'text') {
       if (!pastedText.trim() || pastedText.trim().length < 20)
@@ -78,75 +95,148 @@ export default function GenerateFromPdf() {
     setError(''); setWarning(''); setLoading(true);
     setLoadingMessage('Initializing extraction...');
     try {
-      if (mode === 'text') {
-        const res = await api.post('/generate/from-text', {
-          text: pastedText,
-          title,
-          durationMinutes,
-          folderIds: JSON.stringify(selectedFolderIds)
-        });
-        if (res.data.warning) {
-          setWarning(res.data.warning);
-          setTimeout(() => navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`), 3000);
+      if (addToQuizId) {
+        // Add to existing quiz mode
+        if (mode === 'text') {
+          const res = await api.post(`/generate/add-to-quiz/${addToQuizId}`, {
+            text: pastedText
+          });
+          if (res.data.warning) {
+            setWarning(res.data.warning);
+            setTimeout(() => navigate(`/admin/quiz/${addToQuizId}/answer-key?newOnly=true`), 3000);
+          } else {
+            navigate(`/admin/quiz/${addToQuizId}/answer-key?newOnly=true`);
+          }
         } else {
-          navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`);
+          const formData = new FormData();
+          formData.append('pdf', file);
+
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${api.defaults.baseURL || ''}/generate/add-to-quiz/${addToQuizId}`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw { response: { data: errData } };
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let partialLine = '';
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = (partialLine + chunk).split('\n');
+            partialLine = lines.pop() || '';
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+              const payloadStr = trimmed.slice(6);
+              let payload;
+              try {
+                payload = JSON.parse(payloadStr);
+              } catch (e) {
+                console.error('Failed to parse SSE payload:', payloadStr);
+                continue;
+              }
+
+              if (payload.type === 'progress') {
+                setLoadingMessage(payload.message);
+              } else if (payload.type === 'error') {
+                throw { response: { data: { errorCode: payload.errorCode, message: payload.message } } };
+              } else if (payload.type === 'success') {
+                if (payload.warning) {
+                  setWarning(payload.warning);
+                  setTimeout(() => navigate(`/admin/quiz/${addToQuizId}/answer-key?newOnly=true`), 3000);
+                } else {
+                  navigate(`/admin/quiz/${addToQuizId}/answer-key?newOnly=true`);
+                }
+              }
+            }
+          }
         }
       } else {
-        const formData = new FormData();
-        formData.append('pdf', file);
-        formData.append('title', title);
-        formData.append('durationMinutes', durationMinutes);
-        formData.append('folderIds', JSON.stringify(selectedFolderIds));
-
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${api.defaults.baseURL || ''}/generate/from-pdf`, {
-          method: 'POST',
-          body: formData,
-          headers: {
-            'Authorization': `Bearer ${token}`
+        // Create new quiz mode
+        if (mode === 'text') {
+          const res = await api.post('/generate/from-text', {
+            text: pastedText,
+            title,
+            durationMinutes,
+            folderIds: JSON.stringify(selectedFolderIds)
+          });
+          if (res.data.warning) {
+            setWarning(res.data.warning);
+            setTimeout(() => navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`), 3000);
+          } else {
+            navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`);
           }
-        });
+        } else {
+          const formData = new FormData();
+          formData.append('pdf', file);
+          formData.append('title', title);
+          formData.append('durationMinutes', durationMinutes);
+          formData.append('folderIds', JSON.stringify(selectedFolderIds));
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw { response: { data: errData } };
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let partialLine = '';
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = (partialLine + chunk).split('\n');
-          partialLine = lines.pop() || '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-            const payloadStr = trimmed.slice(6);
-            let payload;
-            try {
-              payload = JSON.parse(payloadStr);
-            } catch (e) {
-              console.error('Failed to parse SSE payload:', payloadStr);
-              continue;
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${api.defaults.baseURL || ''}/generate/from-pdf`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'Authorization': `Bearer ${token}`
             }
+          });
 
-            if (payload.type === 'progress') {
-              setLoadingMessage(payload.message);
-            } else if (payload.type === 'error') {
-              throw { response: { data: { errorCode: payload.errorCode, message: payload.message } } };
-            } else if (payload.type === 'success') {
-              if (payload.warning) {
-                setWarning(payload.warning);
-                setTimeout(() => navigate(`/admin/quiz/${payload.quiz._id}/answer-key`), 3000);
-              } else {
-                navigate(`/admin/quiz/${payload.quiz._id}/answer-key`);
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw { response: { data: errData } };
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let partialLine = '';
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = (partialLine + chunk).split('\n');
+            partialLine = lines.pop() || '';
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+              const payloadStr = trimmed.slice(6);
+              let payload;
+              try {
+                payload = JSON.parse(payloadStr);
+              } catch (e) {
+                console.error('Failed to parse SSE payload:', payloadStr);
+                continue;
+              }
+
+              if (payload.type === 'progress') {
+                setLoadingMessage(payload.message);
+              } else if (payload.type === 'error') {
+                throw { response: { data: { errorCode: payload.errorCode, message: payload.message } } };
+              } else if (payload.type === 'success') {
+                if (payload.warning) {
+                  setWarning(payload.warning);
+                  setTimeout(() => navigate(`/admin/quiz/${payload.quiz._id}/answer-key`), 3000);
+                } else {
+                  navigate(`/admin/quiz/${payload.quiz._id}/answer-key`);
+                }
               }
             }
           }
@@ -161,7 +251,7 @@ export default function GenerateFromPdf() {
       } else if (code === 'INVALID_KEY') {
         setError("NVIDIA API key is invalid or not authorized. Please check the NVIDIA_API_KEY environment variable on Render.");
       } else {
-        setError(err.response?.data?.message || 'Failed to generate quiz. Please try again.');
+        setError(err.response?.data?.message || 'Failed to generate questions. Please try again.');
       }
     } finally { setLoading(false); }
   };
@@ -175,7 +265,9 @@ export default function GenerateFromPdf() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <ShieldCheck className="w-5 h-5 text-accent-400" />
-          <span className="text-xl font-bold text-slate-100">Generate Quiz with AI</span>
+          <span className="text-xl font-bold text-slate-100">
+            {addToQuizId ? 'Add Questions via AI' : 'Generate Quiz with AI'}
+          </span>
           <div className="ml-auto flex items-center gap-3">
             <ThemeToggle />
             <span className="flex items-center gap-1.5 text-xs font-medium text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-3 py-1">
@@ -191,8 +283,15 @@ export default function GenerateFromPdf() {
         <div className="bg-primary-500/10 border border-primary-500/20 rounded-xl px-4 py-3 text-sm text-primary-300 mb-6 flex items-start gap-3">
           <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="font-medium mb-0.5">How this works</p>
-            <p className="text-primary-400 text-xs">NVIDIA NIM extracts all questions and options from your content. You then take a self-attempt to set the correct answers — the AI never guesses answers on your behalf.</p>
+            <p className="font-medium mb-0.5">
+              {addToQuizId ? `Adding questions to: ${targetQuiz ? targetQuiz.title : 'Loading...'}` : 'How this works'}
+            </p>
+            <p className="text-primary-400 text-xs">
+              {addToQuizId 
+                ? 'AI will extract new questions and append them to this quiz. You will then set correct answers for only the newly added questions.'
+                : 'NVIDIA NIM extracts all questions and options from your content. You then take a self-attempt to set the correct answers — the AI never guesses answers on your behalf.'
+              }
+            </p>
           </div>
         </div>
 
@@ -308,49 +407,53 @@ export default function GenerateFromPdf() {
             )}
 
             {/* Quiz Details */}
-            <div className="card space-y-4">
-              <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-accent-400" />
-                Quiz Details
-              </h2>
-              <div>
-                <label className="label">Quiz Title *</label>
-                <input className="input" type="text" placeholder="e.g. HTET CSE 2024" value={title} onChange={e => setTitle(e.target.value)} required />
+            {!addToQuizId && (
+              <div className="card space-y-4">
+                <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-accent-400" />
+                  Quiz Details
+                </h2>
+                <div>
+                  <label className="label">Quiz Title *</label>
+                  <input className="input" type="text" placeholder="e.g. HTET CSE 2024" value={title} onChange={e => setTitle(e.target.value)} required />
+                </div>
+                <div>
+                  <label className="label">Duration (minutes) *</label>
+                  <input className="input" type="number" min={1} max={300} value={durationMinutes} onChange={e => setDurationMinutes(Number(e.target.value))} required />
+                </div>
               </div>
-              <div>
-                <label className="label">Duration (minutes) *</label>
-                <input className="input" type="number" min={1} max={300} value={durationMinutes} onChange={e => setDurationMinutes(Number(e.target.value))} required />
-              </div>
-            </div>
+            )}
 
             {/* Folder Assignment */}
-            <div className="card">
-              <h2 className="text-base font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                <Folder className="w-4 h-4 text-slate-400" />
-                Assign to Folders <span className="text-slate-500 font-normal text-sm">(Optional)</span>
-              </h2>
-              {allFolders.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {allFolders.map(f => (
-                    <button
-                      key={f._id} type="button" onClick={() => toggleFolder(f._id)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${selectedFolderIds.includes(f._id) ? 'bg-primary-500/20 border-primary-500/50 text-primary-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'}`}
-                    >{f.name}</button>
-                  ))}
-                </div>
-              )}
-              <form onSubmit={handleCreateFolder} className="flex gap-2">
-                <input className="input flex-1 text-sm" type="text" placeholder="New folder name..." value={newFolderName} onChange={e => setNewFolderName(e.target.value)} />
-                <button type="submit" className="btn-secondary text-sm px-4 flex items-center gap-1.5" disabled={creatingFolder || !newFolderName.trim()}>
-                  <Plus className="w-3.5 h-3.5" />{creatingFolder ? 'Adding...' : 'Add'}
-                </button>
-              </form>
-            </div>
+            {!addToQuizId && (
+              <div className="card">
+                <h2 className="text-base font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                  <Folder className="w-4 h-4 text-slate-400" />
+                  Assign to Folders <span className="text-slate-500 font-normal text-sm">(Optional)</span>
+                </h2>
+                {allFolders.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {allFolders.map(f => (
+                      <button
+                        key={f._id} type="button" onClick={() => toggleFolder(f._id)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${selectedFolderIds.includes(f._id) ? 'bg-primary-500/20 border-primary-500/50 text-primary-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'}`}
+                      >{f.name}</button>
+                    ))}
+                  </div>
+                )}
+                <form onSubmit={handleCreateFolder} className="flex gap-2">
+                  <input className="input flex-1 text-sm" type="text" placeholder="New folder name..." value={newFolderName} onChange={e => setNewFolderName(e.target.value)} />
+                  <button type="submit" className="btn-secondary text-sm px-4 flex items-center gap-1.5" disabled={creatingFolder || !newFolderName.trim()}>
+                    <Plus className="w-3.5 h-3.5" />{creatingFolder ? 'Adding...' : 'Add'}
+                  </button>
+                </form>
+              </div>
+            )}
 
             <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2 py-3 text-base"
-              disabled={(mode === 'text' ? !pastedText.trim() : !file) || !title.trim() || loading}>
+              disabled={(mode === 'text' ? !pastedText.trim() : !file) || (!addToQuizId && !title.trim()) || loading}>
               <Sparkles className="w-5 h-5" />
-              Generate Quiz with AI
+              {addToQuizId ? 'Add Questions to Quiz' : 'Generate Quiz with AI'}
             </button>
           </form>
         )}

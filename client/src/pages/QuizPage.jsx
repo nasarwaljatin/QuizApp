@@ -40,16 +40,18 @@ export default function QuizPage() {
       try {
         const res = await api.get(`/quizzes/${id}`);
         const q = res.data;
-        // Shuffle questions and each question's options once
-        const shuffled = shuffle(q.questions).map(question => ({
-          ...question,
-          options: shuffle(question.options)
-        }));
         setQuiz(q);
-        setShuffledQuestions(shuffled);
+        setShuffledQuestions(q.questions);
         setStartTime(Date.now());
       } catch (err) {
-        setError(err.response?.data?.message || 'Failed to load quiz.');
+        if (err.response?.status === 403 && err.response?.data?.alreadyAttempted) {
+          setError({
+            message: "You've already attempted this quiz.",
+            attemptId: err.response.data.attemptId
+          });
+        } else {
+          setError(err.response?.data?.message || 'Failed to load quiz.');
+        }
       } finally {
         setLoading(false);
       }
@@ -103,13 +105,31 @@ export default function QuizPage() {
   }
 
   if (error) {
+    const isAlreadyAttempted = typeof error === 'object' && error.attemptId;
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
-        <div className="card text-center max-w-sm">
+        <div className="card text-center max-w-sm w-full">
           <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-slate-100 mb-2">Error</h2>
-          <p className="text-slate-400 mb-6">{error}</p>
-          <button onClick={() => navigate('/')} className="btn-primary">Back to Home</button>
+          <h2 className="text-xl font-bold text-slate-100 mb-2">
+            {isAlreadyAttempted ? 'Already Attempted' : 'Error'}
+          </h2>
+          <p className="text-slate-400 mb-6">
+            {isAlreadyAttempted ? error.message : error}
+          </p>
+          {isAlreadyAttempted ? (
+            <div className="flex flex-col gap-3">
+              <button onClick={() => navigate(`/result/${error.attemptId}`)} className="btn-primary w-full">
+                View My Result
+              </button>
+              <button onClick={() => navigate('/')} className="btn-secondary w-full">
+                Back to Home
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => navigate('/')} className="btn-primary w-full">
+              Back to Home
+            </button>
+          )}
         </div>
       </div>
     );

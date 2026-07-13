@@ -215,6 +215,13 @@ export default function ManageQuizzes() {
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button
+                          onClick={() => navigate(`/admin/generate-from-pdf?addTo=${quiz._id}`)}
+                          title="Add Questions via AI"
+                          className="p-2 text-slate-400 hover:text-violet-400 transition-colors"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => togglePublish(quiz)}
                           title={quiz.isPublished ? 'Unpublish' : 'Publish'}
                           className="p-2 text-slate-400 hover:text-emerald-400 transition-colors"
@@ -233,7 +240,7 @@ export default function ManageQuizzes() {
                 )}
               </div>
             )}
-
+ 
             {/* AI Drafts tab */}
             {activeTab === 'drafts' && (
               <div className="space-y-4">
@@ -274,9 +281,18 @@ export default function ManageQuizzes() {
                             <ChevronRight className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <button onClick={() => setDeleteConfirm(quiz._id)} className="p-2 text-slate-500 hover:text-red-400 transition-colors flex-shrink-0">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => navigate(`/admin/generate-from-pdf?addTo=${quiz._id}`)}
+                            title="Add Questions via AI"
+                            className="p-2 text-slate-400 hover:text-violet-400 transition-colors"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setDeleteConfirm(quiz._id)} className="p-2 text-slate-500 hover:text-red-400 transition-colors flex-shrink-0">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))

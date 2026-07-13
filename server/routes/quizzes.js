@@ -109,15 +109,20 @@ router.get('/', verifyStudent, async (req, res) => {
 
     const quizzes = await Quiz.find(filter)
       .populate('folderIds', 'name')
-      .select('title description durationMinutes questions createdAt folderIds negativeMarkingPoints')
+      .select('title description durationMinutes questions createdAt folderIds negativeMarking negativeMarkingPoints shuffleQuestions shuffleOptions allowMultipleAttempts showCorrectAnswersAfterSubmit randomizeQuestionSubset subsetSize')
       .lean();
 
-    // Strip correctAnswer from questions
-    const safeQuizzes = quizzes.map(q => ({
-      ...q,
-      questions: q.questions.map(({ questionText, options, _id }) => ({ _id, questionText, options })),
-      questionCount: q.questions.length
-    }));
+    // Strip correctAnswer from questions and compute correct question count (respect subset)
+    const safeQuizzes = quizzes.map(q => {
+      const actualCount = q.randomizeQuestionSubset && q.subsetSize > 0 && q.subsetSize < q.questions.length
+        ? q.subsetSize
+        : q.questions.length;
+      return {
+        ...q,
+        questions: q.questions.map(({ questionText, options, _id }) => ({ _id, questionText, options })),
+        questionCount: actualCount
+      };
+    });
 
     res.json(safeQuizzes);
   } catch (err) {
@@ -125,15 +130,64 @@ router.get('/', verifyStudent, async (req, res) => {
   }
 });
 
+// Helper for shuffling arrays
+function shuffleArray(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 // GET /api/quizzes/:id — get a single published quiz to take (no correct answers)
 router.get('/:id', verifyStudent, async (req, res) => {
   try {
     const quiz = await Quiz.findOne({ _id: req.params.id, isPublished: true }).lean();
     if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
 
+    // Block repeat attempts if allowMultipleAttempts is false
+    if (!quiz.allowMultipleAttempts) {
+      const existingAttempt = await Attempt.findOne({ studentId: req.user.id, quizId: req.params.id });
+      if (existingAttempt) {
+        return res.status(403).json({
+          alreadyAttempted: true,
+          attemptId: existingAttempt._id,
+          message: "You've already attempted this quiz."
+        });
+      }
+    }
+
+    let questionsToDeliver = quiz.questions;
+    
+    // Add indices to preserve order if randomizeQuestionSubset is true but shuffleQuestions is false
+    const indexedQuestions = questionsToDeliver.map((q, idx) => ({ ...q, originalIdx: idx }));
+
+    if (quiz.randomizeQuestionSubset && quiz.subsetSize > 0 && quiz.subsetSize < questionsToDeliver.length) {
+      const shuffledForSubset = shuffleArray(indexedQuestions);
+      let selectedSubset = shuffledForSubset.slice(0, quiz.subsetSize);
+      
+      if (!quiz.shuffleQuestions) {
+        selectedSubset.sort((a, b) => a.originalIdx - b.originalIdx);
+      }
+      questionsToDeliver = selectedSubset;
+    } else {
+      questionsToDeliver = indexedQuestions;
+    }
+
+    if (quiz.shuffleQuestions) {
+      questionsToDeliver = shuffleArray(questionsToDeliver);
+    }
+
+    const safeQuestions = questionsToDeliver.map(q => ({
+      _id: q._id,
+      questionText: q.questionText,
+      options: quiz.shuffleOptions ? shuffleArray(q.options) : q.options
+    }));
+
     const safeQuiz = {
       ...quiz,
-      questions: quiz.questions.map(({ questionText, options, _id }) => ({ _id, questionText, options }))
+      questions: safeQuestions
     };
 
     res.json(safeQuiz);
@@ -169,7 +223,11 @@ router.get('/admin/:id', verifyAdmin, async (req, res) => {
 // POST /api/quizzes — create quiz
 router.post('/', verifyAdmin, async (req, res) => {
   try {
-    const { title, description, durationMinutes, questions, isPublished, negativeMarkingPoints, folderIds } = req.body;
+    const {
+      title, description, durationMinutes, questions, isPublished, folderIds,
+      negativeMarking, negativeMarkingPoints, shuffleQuestions, shuffleOptions,
+      allowMultipleAttempts, showCorrectAnswersAfterSubmit, randomizeQuestionSubset, subsetSize
+    } = req.body;
 
     if (!title || !durationMinutes || !questions || questions.length === 0) {
       return res.status(400).json({ message: 'Title, duration, and at least one question are required.' });
@@ -181,8 +239,15 @@ router.post('/', verifyAdmin, async (req, res) => {
       durationMinutes,
       questions,
       isPublished: isPublished || false,
-      negativeMarkingPoints: negativeMarkingPoints || 0,
       folderIds: folderIds || [],
+      negativeMarking: negativeMarking !== undefined ? negativeMarking : false,
+      negativeMarkingPoints: negativeMarkingPoints || 0,
+      shuffleQuestions: shuffleQuestions !== undefined ? shuffleQuestions : true,
+      shuffleOptions: shuffleOptions !== undefined ? shuffleOptions : true,
+      allowMultipleAttempts: allowMultipleAttempts !== undefined ? allowMultipleAttempts : false,
+      showCorrectAnswersAfterSubmit: showCorrectAnswersAfterSubmit !== undefined ? showCorrectAnswersAfterSubmit : true,
+      randomizeQuestionSubset: randomizeQuestionSubset !== undefined ? randomizeQuestionSubset : false,
+      subsetSize: subsetSize || 0,
       createdBy: req.user.id
     });
 
@@ -196,7 +261,11 @@ router.post('/', verifyAdmin, async (req, res) => {
 // PUT /api/quizzes/:id — update quiz
 router.put('/:id', verifyAdmin, async (req, res) => {
   try {
-    const { title, description, durationMinutes, questions, isPublished, negativeMarkingPoints, folderIds } = req.body;
+    const {
+      title, description, durationMinutes, questions, isPublished, folderIds,
+      negativeMarking, negativeMarkingPoints, shuffleQuestions, shuffleOptions,
+      allowMultipleAttempts, showCorrectAnswersAfterSubmit, randomizeQuestionSubset, subsetSize
+    } = req.body;
 
     const quiz = await Quiz.findById(req.params.id);
     if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
@@ -206,8 +275,16 @@ router.put('/:id', verifyAdmin, async (req, res) => {
     if (durationMinutes !== undefined) quiz.durationMinutes = durationMinutes;
     if (questions !== undefined) quiz.questions = questions;
     if (isPublished !== undefined) quiz.isPublished = isPublished;
-    if (negativeMarkingPoints !== undefined) quiz.negativeMarkingPoints = negativeMarkingPoints;
     if (folderIds !== undefined) quiz.folderIds = folderIds;
+    if (negativeMarking !== undefined) quiz.negativeMarking = negativeMarking;
+    if (negativeMarkingPoints !== undefined) quiz.negativeMarkingPoints = negativeMarkingPoints;
+    if (shuffleQuestions !== undefined) quiz.shuffleQuestions = shuffleQuestions;
+    if (shuffleOptions !== undefined) quiz.shuffleOptions = shuffleOptions;
+    if (allowMultipleAttempts !== undefined) quiz.allowMultipleAttempts = allowMultipleAttempts;
+    if (showCorrectAnswersAfterSubmit !== undefined) quiz.showCorrectAnswersAfterSubmit = showCorrectAnswersAfterSubmit;
+    if (randomizeQuestionSubset !== undefined) quiz.randomizeQuestionSubset = randomizeQuestionSubset;
+    if (subsetSize !== undefined) quiz.subsetSize = subsetSize;
+    
     quiz.updatedAt = new Date();
 
     await quiz.save();
@@ -234,15 +311,25 @@ router.get('/admin/:id/for-answer-key', verifyAdmin, async (req, res) => {
     const quiz = await Quiz.findById(req.params.id).lean();
     if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
 
+    const { newOnly } = req.query;
+    let questionsToReturn = quiz.questions;
+    const answeredCount = quiz.questions.filter(q => q.correctAnswer && q.correctAnswer.trim() !== '').length;
+
+    if (newOnly === 'true') {
+      questionsToReturn = quiz.questions.filter(q => !q.correctAnswer || q.correctAnswer.trim() === '');
+    }
+
     // Strip correctAnswer — admin will be setting them fresh
     const safeQuiz = {
       ...quiz,
-      questions: quiz.questions.map(({ questionText, options, language, _id }) => ({
+      questions: questionsToReturn.map(({ questionText, options, language, _id }) => ({
         _id,
         questionText,
         options,
         language: language || 'English'
-      }))
+      })),
+      totalQuestionsCount: quiz.questions.length,
+      answeredQuestionsCount: answeredCount
     };
 
     res.json(safeQuiz);
