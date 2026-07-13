@@ -33,11 +33,16 @@ export default function ResultSummary({ attempt, quizTitle }) {
       <p className={`text-sm font-semibold uppercase tracking-widest ${grade.color} mb-1`}>{grade.label}</p>
 
       {/* Quiz title */}
-      <h2 className="text-2xl font-bold text-slate-100 mb-6">{quizTitle}</h2>
+      <h2 className="text-2xl font-bold text-slate-100 mb-2">{quizTitle}</h2>
+
+      {/* Headline score */}
+      <p className="text-lg text-slate-300 mb-6">
+        You scored <span className="font-bold text-primary-400">{attempt.score}</span> / <span className="font-bold text-slate-100">{attempt.totalQuestions}</span> marks <span className="text-sm text-slate-500 font-medium">({percentage}%)</span>
+      </p>
 
       {/* Score circle */}
       <div className="flex justify-center mb-6">
-        <div className="relative w-32 h-32">
+        <div className="relative w-36 h-36">
           <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
             <circle cx="60" cy="60" r="52" fill="none" stroke="#1e293b" strokeWidth="10" />
             <circle
@@ -51,7 +56,8 @@ export default function ResultSummary({ attempt, quizTitle }) {
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-3xl font-bold text-slate-100">{percentage}%</span>
+            <span className="text-xl font-bold text-slate-100">{attempt.score} / {attempt.totalQuestions}</span>
+            <span className="text-[11px] text-slate-400 font-medium mt-0.5">({percentage}%)</span>
           </div>
         </div>
       </div>

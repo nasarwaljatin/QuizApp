@@ -123,12 +123,13 @@ export default function StudentDashboard() {
                     className="card flex items-center gap-4 cursor-pointer hover:border-primary-500/40 transition-all duration-200 hover:-translate-y-0.5"
                   >
                     {/* Score circle */}
-                    <div className={`w-14 h-14 rounded-full border-2 flex items-center justify-center flex-shrink-0 font-bold text-sm ${
+                    <div className={`w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center flex-shrink-0 font-bold ${
                       pct >= 70 ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
                       : pct >= 40 ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
                       : 'border-red-500/50 bg-red-500/10 text-red-400'
                     }`}>
-                      {pct}%
+                      <span className="text-[11px] leading-tight">{attempt.score}/{attempt.totalQuestions}</span>
+                      <span className="text-[9px] font-normal opacity-85">({pct}%)</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-100 truncate">{attempt.quizId?.title || 'Quiz'}</p>

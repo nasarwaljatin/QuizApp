@@ -5,6 +5,15 @@ const Quiz = require('../models/Quiz');
 const verifyStudent = require('../middleware/verifyStudent');
 const verifyAdmin = require('../middleware/verifyAdmin');
 
+// Helper to format attempt responses
+const formatAttemptResponse = (attempt) => {
+  if (!attempt) return null;
+  const obj = attempt.toObject ? attempt.toObject() : attempt;
+  obj.totalMarks = obj.totalMarks ?? obj.totalQuestions;
+  obj.percentage = obj.totalMarks > 0 ? parseFloat(((obj.score / obj.totalMarks) * 100).toFixed(2)) : 0;
+  return obj;
+};
+
 // ─── STUDENT ROUTES ───────────────────────────────────────────────────────────
 
 // POST /api/attempts — submit an attempt
@@ -43,12 +52,13 @@ router.post('/', verifyStudent, async (req, res) => {
       score,
       negativeMarksDeducted,
       totalQuestions: quiz.questions.length,
+      totalMarks: quiz.questions.length,
       timeTakenSeconds,
       autoSubmitted: autoSubmitted || false
     });
 
     await attempt.save();
-    res.status(201).json(attempt);
+    res.status(201).json(formatAttemptResponse(attempt));
   } catch (err) {
     res.status(500).json({ message: 'Server error.', error: err.message });
   }
@@ -60,7 +70,7 @@ router.get('/my', verifyStudent, async (req, res) => {
     const attempts = await Attempt.find({ studentId: req.user.id })
       .populate('quizId', 'title durationMinutes')
       .sort({ submittedAt: -1 });
-    res.json(attempts);
+    res.json(attempts.map(formatAttemptResponse));
   } catch (err) {
     res.status(500).json({ message: 'Server error.', error: err.message });
   }
@@ -72,7 +82,7 @@ router.get('/my/:attemptId', verifyStudent, async (req, res) => {
     const attempt = await Attempt.findOne({ _id: req.params.attemptId, studentId: req.user.id })
       .populate('quizId', 'title durationMinutes');
     if (!attempt) return res.status(404).json({ message: 'Attempt not found.' });
-    res.json(attempt);
+    res.json(formatAttemptResponse(attempt));
   } catch (err) {
     res.status(500).json({ message: 'Server error.', error: err.message });
   }
@@ -87,7 +97,7 @@ router.get('/admin/all', verifyAdmin, async (req, res) => {
       .populate('studentId', 'name email')
       .populate('quizId', 'title')
       .sort({ submittedAt: -1 });
-    res.json(attempts);
+    res.json(attempts.map(formatAttemptResponse));
   } catch (err) {
     res.status(500).json({ message: 'Server error.', error: err.message });
   }
@@ -126,7 +136,7 @@ router.get('/admin/quiz/:quizId', verifyAdmin, async (req, res) => {
     })).sort((a, b) => b.wrong - a.wrong);
 
     res.json({
-      attempts,
+      attempts: attempts.map(formatAttemptResponse),
       analytics: { totalAttempts, avgScore: avgScore.toFixed(2), autoSubmittedCount, questionDifficulty }
     });
   } catch (err) {

@@ -14,6 +14,7 @@ const attemptSchema = new mongoose.Schema({
   score: { type: Number, required: true },
   negativeMarksDeducted: { type: Number, default: 0 }, // total points lost due to negative marking
   totalQuestions: { type: Number, required: true },
+  totalMarks: { type: Number, required: true, default: function() { return this.totalQuestions; } },
   timeTakenSeconds: { type: Number, required: true },
   submittedAt: { type: Date, default: Date.now },
   autoSubmitted: { type: Boolean, default: false }
