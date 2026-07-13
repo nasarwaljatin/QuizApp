@@ -163,11 +163,14 @@ router.get('/:id', verifyStudent, async (req, res) => {
     // Add indices to preserve order if randomizeQuestionSubset is true but shuffleQuestions is false
     const indexedQuestions = questionsToDeliver.map((q, idx) => ({ ...q, originalIdx: idx }));
 
+    const shouldShuffleQuestions = quiz.shuffleQuestions !== false;
+    const shouldShuffleOptions = quiz.shuffleOptions !== false;
+
     if (quiz.randomizeQuestionSubset && quiz.subsetSize > 0 && quiz.subsetSize < questionsToDeliver.length) {
       const shuffledForSubset = shuffleArray(indexedQuestions);
       let selectedSubset = shuffledForSubset.slice(0, quiz.subsetSize);
       
-      if (!quiz.shuffleQuestions) {
+      if (!shouldShuffleQuestions) {
         selectedSubset.sort((a, b) => a.originalIdx - b.originalIdx);
       }
       questionsToDeliver = selectedSubset;
@@ -175,14 +178,14 @@ router.get('/:id', verifyStudent, async (req, res) => {
       questionsToDeliver = indexedQuestions;
     }
 
-    if (quiz.shuffleQuestions) {
+    if (shouldShuffleQuestions) {
       questionsToDeliver = shuffleArray(questionsToDeliver);
     }
 
     const safeQuestions = questionsToDeliver.map(q => ({
       _id: q._id,
       questionText: q.questionText,
-      options: quiz.shuffleOptions ? shuffleArray(q.options) : q.options
+      options: shouldShuffleOptions ? shuffleArray(q.options) : q.options
     }));
 
     const safeQuiz = {
