@@ -2,9 +2,9 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const https = require('https');
-const pdfParse = require('pdf-parse');
 const Quiz = require('../models/Quiz');
 const verifyAdmin = require('../middleware/verifyAdmin');
+const { pdfToImg } = require('pdftoimg-js');
 
 // Multer: memory storage, PDF only, max 10MB
 const upload = multer({
@@ -16,10 +16,10 @@ const upload = multer({
   }
 });
 
-// Helper: classify Gemini API errors based on status code and response body
-const classifyGeminiError = (statusCode, body) => {
+// Helper: classify NVIDIA API errors based on status code and response body
+const classifyNvidiaError = (statusCode, body) => {
   if (statusCode === 403 || statusCode === 401) {
-    return { code: 'INVALID_KEY', message: 'Gemini API key is invalid or not authorized.' };
+    return { code: 'INVALID_KEY', message: 'NVIDIA API key is invalid or not authorized.' };
   }
 
   if (statusCode === 429) {
@@ -36,7 +36,6 @@ const classifyGeminiError = (statusCode, body) => {
     if (lowerMsg.includes('token') || lowerMsg.includes('tpm') || lowerMsg.includes('tokens per minute')) {
       return { code: 'RATE_LIMIT_TPM', message };
     }
-    // Default to RPM for transient requests rate limit
     return { code: 'RATE_LIMIT_RPM', message };
   }
 
@@ -52,22 +51,29 @@ const classifyGeminiError = (statusCode, body) => {
 // Helper: wait N milliseconds
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// ── Shared Gemini caller ───────────────────────────────────────────────────────
-const callGemini = (parts) => {
+// ── Shared NVIDIA NIM caller ───────────────────────────────────────────────────────
+const callNvidiaNIM = (model, messages, maxTokens = 2048) => {
   return new Promise((resolve, reject) => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return reject(new Error('GEMINI_API_KEY is not set on the server.'));
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) return reject(new Error('NVIDIA_API_KEY is not set on the server.'));
 
     const requestBody = JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: { temperature: 0.1, response_mime_type: 'application/json' }
+      model,
+      messages,
+      temperature: 0.1,
+      max_tokens: maxTokens,
+      ...(model.includes('instruct') ? { response_format: { type: "json_object" } } : {})
     });
 
     const options = {
-      hostname: 'generativelanguage.googleapis.com',
-      path: `/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+      hostname: 'integrate.api.nvidia.com',
+      path: '/v1/chat/completions',
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody) }
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Length': Buffer.byteLength(requestBody)
+      }
     };
 
     const req = https.request(options, (res) => {
@@ -81,20 +87,20 @@ const callGemini = (parts) => {
   });
 };
 
-// Helper: call Gemini with automatic retry for transient limits (RPM/TPM)
-const callGeminiWithRetry = async (parts) => {
+// Helper: call NVIDIA NIM with automatic retry for transient limits (RPM/TPM)
+const callNvidiaNIMWithRetry = async (model, messages, maxTokens = 2048) => {
   let attempt = 0;
   const maxRetries = 3;
 
   while (true) {
     let response;
     try {
-      response = await callGemini(parts);
+      response = await callNvidiaNIM(model, messages, maxTokens);
     } catch (err) {
       if (attempt < maxRetries) {
         attempt++;
         const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-        console.warn(`[Gemini Request Failure] Network error, retrying in ${delay.toFixed(0)}ms (attempt ${attempt}/${maxRetries}):`, err.message);
+        console.warn(`[NVIDIA NIM Request Failure] Network error, retrying in ${delay.toFixed(0)}ms (attempt ${attempt}/${maxRetries}):`, err.message);
         await sleep(delay);
         continue;
       }
@@ -105,12 +111,10 @@ const callGeminiWithRetry = async (parts) => {
       return response;
     }
 
-    const errorInfo = classifyGeminiError(response.statusCode, response.body);
+    const errorInfo = classifyNvidiaError(response.statusCode, response.body);
 
-    // Logging requirement:
-    // Log the raw Gemini error response server-side (status code, error type, retry-after header if present)
     const retryAfter = response.headers?.['retry-after'] || response.headers?.['x-retry-after'] || null;
-    console.error('[Gemini API Call Failed Log]', {
+    console.error('[NVIDIA API Call Failed Log]', {
       attempt,
       statusCode: response.statusCode,
       errorType: errorInfo.code,
@@ -123,9 +127,8 @@ const callGeminiWithRetry = async (parts) => {
 
     if (isTransient && attempt < maxRetries) {
       attempt++;
-      // Exponential backoff: 2s, 4s, 8s plus random jitter (e.g. 0-1s)
       const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-      console.log(`[Gemini Transient Limit] Retrying in ${delay.toFixed(0)}ms (attempt ${attempt}/${maxRetries})...`);
+      console.log(`[NVIDIA Transient Limit] Retrying in ${delay.toFixed(0)}ms (attempt ${attempt}/${maxRetries})...`);
       await sleep(delay);
       continue;
     }
@@ -134,27 +137,8 @@ const callGeminiWithRetry = async (parts) => {
   }
 };
 
-// ── Shared: handle Gemini response → validate → save quiz ─────────────────────
-const handleGeminiResponse = async (geminiResponse, { title, durationMinutes, parsedFolderIds, createdBy }, res) => {
-  const errorInfo = classifyGeminiError(geminiResponse.statusCode, geminiResponse.body);
-
-  if (geminiResponse.statusCode !== 200) {
-    return res.status(geminiResponse.statusCode === 429 ? 429 : 500).json({
-      errorCode: errorInfo.code,
-      message: errorInfo.message
-    });
-  }
-
-  let geminiData;
-  try { geminiData = JSON.parse(geminiResponse.body); } catch {
-    return res.status(500).json({ errorCode: 'PARSE_ERROR', message: 'Could not parse AI response.' });
-  }
-
-  const textContent = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!textContent) {
-    return res.status(500).json({ errorCode: 'EMPTY_RESPONSE', message: 'AI returned an empty response. Please try again.' });
-  }
-
+// ── Shared: handle extracted text → validate → save quiz ─────────────────────
+const handleExtractedQuestions = async (textContent, { title, durationMinutes, parsedFolderIds, createdBy }, res) => {
   let extractedData;
   try {
     const cleaned = textContent.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
@@ -232,19 +216,35 @@ router.post('/from-text', verifyAdmin, async (req, res) => {
     let parsedFolderIds = [];
     try { parsedFolderIds = folderIds ? (typeof folderIds === 'string' ? JSON.parse(folderIds) : folderIds) : []; } catch {}
 
-    // Trim to ~60,000 chars to stay within token limits
     const trimmedText = text.length > 60000 ? text.slice(0, 60000) + '\n[...text continues...]' : text;
 
-    const fullPrompt = `${EXTRACTION_PROMPT}\n\nHere is the question text:\n---\n${trimmedText}\n---`;
+    const chatMessages = [
+      {
+        role: "system",
+        content: "You are an expert system that extracts multiple-choice questions from raw text and formats them as strict JSON."
+      },
+      {
+        role: "user",
+        content: `${EXTRACTION_PROMPT}\n\nHere is the question text:\n---\n${trimmedText}\n---`
+      }
+    ];
 
-    let geminiResponse;
-    try {
-      geminiResponse = await callGeminiWithRetry([{ text: fullPrompt }]);
-    } catch (err) {
-      return res.status(503).json({ message: 'Failed to reach AI service. Please try again.' });
+    const nimResponse = await callNvidiaNIMWithRetry('meta/llama-3.1-70b-instruct', chatMessages, 2048);
+
+    if (nimResponse.statusCode !== 200) {
+      const errorInfo = classifyNvidiaError(nimResponse.statusCode, nimResponse.body);
+      return res.status(nimResponse.statusCode === 429 ? 429 : 500).json({
+        errorCode: errorInfo.code,
+        message: errorInfo.message
+      });
     }
 
-    return handleGeminiResponse(geminiResponse, { title, durationMinutes, parsedFolderIds, createdBy: req.user.id }, res);
+    const textContent = JSON.parse(nimResponse.body)?.choices?.[0]?.message?.content;
+    if (!textContent) {
+      return res.status(500).json({ errorCode: 'EMPTY_RESPONSE', message: 'AI returned an empty response. Please try again.' });
+    }
+
+    return handleExtractedQuestions(textContent, { title, durationMinutes, parsedFolderIds, createdBy: req.user.id }, res);
 
   } catch (err) {
     console.error('Generate from text error:', err);
@@ -255,52 +255,188 @@ router.post('/from-text', verifyAdmin, async (req, res) => {
 // ── POST /api/generate/from-pdf — upload PDF file ─────────────────────────────
 router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ message: 'Please upload a PDF file.' });
+    if (!req.file) {
+      return res.status(400).json({ message: 'Please upload a PDF file.' });
+    }
 
     const { title, durationMinutes, folderIds } = req.body;
-    if (!title || !durationMinutes) return res.status(400).json({ message: 'Quiz title and duration are required.' });
+    if (!title || !durationMinutes) {
+      return res.status(400).json({ message: 'Quiz title and duration are required.' });
+    }
 
     let parsedFolderIds = [];
     try { parsedFolderIds = folderIds ? (typeof folderIds === 'string' ? JSON.parse(folderIds) : folderIds) : []; } catch {}
 
-    // Try text extraction first (cheap)
-    let pdfText = '';
-    let useBase64Fallback = false;
-    try {
-      const pdfData = await pdfParse(req.file.buffer, { max: 0 });
-      pdfText = pdfData.text || '';
-    } catch {
-      useBase64Fallback = true;
-    }
-    if (!useBase64Fallback && pdfText.trim().length < 50) useBase64Fallback = true;
+    // Establish SSE connection headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
 
-    let geminiResponse;
+    const sendProgress = (message) => {
+      res.write(`data: ${JSON.stringify({ type: 'progress', message })}\n\n`);
+    };
+
+    const sendError = (statusCode, errorCode, message) => {
+      res.write(`data: ${JSON.stringify({ type: 'error', statusCode, errorCode, message })}\n\n`);
+      res.end();
+    };
+
+    sendProgress('Converting PDF to images...');
+
+    let pageImages = [];
     try {
-      if (useBase64Fallback) {
-        // Scanned/image PDF → send as base64 for vision
-        console.log('Using base64 vision mode for scanned PDF');
-        const base64Pdf = req.file.buffer.toString('base64');
-        geminiResponse = await callGeminiWithRetry([
-          { inline_data: { mime_type: 'application/pdf', data: base64Pdf } },
-          { text: EXTRACTION_PROMPT }
-        ]);
-      } else {
-        // Text PDF → send extracted text only
-        const trimmedText = pdfText.length > 60000 ? pdfText.slice(0, 60000) + '\n[...document continues...]' : pdfText;
-        const fullPrompt = `${EXTRACTION_PROMPT}\n\nHere is the extracted PDF text:\n---\n${trimmedText}\n---`;
-        geminiResponse = await callGeminiWithRetry([{ text: fullPrompt }]);
-      }
+      const rawImages = await pdfToImg(req.file.buffer, {
+        scale: 1.5,
+        imgType: 'png'
+      });
+      pageImages = Array.isArray(rawImages) ? rawImages : [rawImages];
     } catch (err) {
-      return res.status(503).json({ message: 'Failed to reach AI service. Please try again.' });
+      console.error('PDF-to-images conversion error:', err);
+      return sendError(500, 'CONVERSION_ERROR', 'Failed to convert PDF to images: ' + err.message);
     }
 
-    return handleGeminiResponse(geminiResponse, { title, durationMinutes, parsedFolderIds, createdBy: req.user.id }, res);
+    if (pageImages.length === 0) {
+      return sendError(400, 'EMPTY_PDF', 'The PDF contains no pages.');
+    }
+
+    sendProgress(`PDF converted successfully. Found ${pageImages.length} page(s). Starting extraction...`);
+
+    const allQuestions = [];
+    const failedPages = [];
+
+    for (let i = 0; i < pageImages.length; i++) {
+      sendProgress(`Processing page ${i + 1} of ${pageImages.length}...`);
+
+      try {
+        const dataUrl = pageImages[i];
+        const base64Data = dataUrl.split(',')[1] || dataUrl;
+
+        // Step A: Call NVIDIA Nemotron OCR to extract text from the page image
+        const ocrMessages = [
+          {
+            role: "user",
+            content: `Perform OCR on this image. Return only the raw text, preserving the content of questions and options. <img src="data:image/png;base64,${base64Data}" />`
+          }
+        ];
+
+        const ocrResponse = await callNvidiaNIMWithRetry('nvidia/nemotron-ocr-v2', ocrMessages, 4096);
+
+        if (ocrResponse.statusCode !== 200) {
+          const errorInfo = classifyNvidiaError(ocrResponse.statusCode, ocrResponse.body);
+          console.warn(`[Page ${i + 1}] OCR model failed:`, errorInfo.message);
+          failedPages.push(i + 1);
+          continue;
+        }
+
+        const ocrResult = JSON.parse(ocrResponse.body);
+        const pageText = ocrResult?.choices?.[0]?.message?.content;
+
+        if (!pageText || pageText.trim().length < 10) {
+          console.warn(`[Page ${i + 1}] OCR returned empty or very short text.`);
+          failedPages.push(i + 1);
+          continue;
+        }
+
+        // Step B: Call instruction-following chat completion to structure questions into JSON
+        const chatMessages = [
+          {
+            role: "system",
+            content: "You are an expert system that extracts multiple-choice questions from raw OCR text and formats them as strict JSON."
+          },
+          {
+            role: "user",
+            content: `${EXTRACTION_PROMPT}\n\nHere is the raw OCR text from page ${i + 1}:\n---\n${pageText}\n---`
+          }
+        ];
+
+        const chatResponse = await callNvidiaNIMWithRetry('meta/llama-3.1-70b-instruct', chatMessages, 2048);
+
+        if (chatResponse.statusCode !== 200) {
+          const errorInfo = classifyNvidiaError(chatResponse.statusCode, chatResponse.body);
+          console.warn(`[Page ${i + 1}] Structuring model failed:`, errorInfo.message);
+          failedPages.push(i + 1);
+          continue;
+        }
+
+        const chatResult = JSON.parse(chatResponse.body);
+        const contentText = chatResult?.choices?.[0]?.message?.content;
+
+        if (!contentText) {
+          console.warn(`[Page ${i + 1}] Chat model returned empty response.`);
+          failedPages.push(i + 1);
+          continue;
+        }
+
+        // Parse structured questions
+        let extractedData;
+        try {
+          const cleaned = contentText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+          extractedData = JSON.parse(cleaned);
+        } catch {
+          console.warn(`[Page ${i + 1}] Failed to parse chat model response as JSON:`, contentText.substring(0, 200));
+          failedPages.push(i + 1);
+          continue;
+        }
+
+        if (extractedData?.questions && Array.isArray(extractedData.questions)) {
+          extractedData.questions.forEach(q => {
+            if (
+              q.questionText && typeof q.questionText === 'string' && q.questionText.trim() &&
+              Array.isArray(q.options) && q.options.length >= 2 &&
+              q.options.every(o => typeof o === 'string' && o.trim())
+            ) {
+              allQuestions.push({
+                questionText: q.questionText.trim(),
+                options: q.options.map(o => o.trim()),
+                language: q.language || 'English',
+                correctAnswer: ''
+              });
+            }
+          });
+        }
+      } catch (pageErr) {
+        console.error(`[Page ${i + 1}] Unhandled extraction error:`, pageErr);
+        failedPages.push(i + 1);
+      }
+    }
+
+    if (allQuestions.length === 0) {
+      let failMsg = 'No questions could be extracted from the PDF.';
+      if (failedPages.length > 0) {
+        failMsg += ` (Failed on pages: ${failedPages.join(', ')})`;
+      }
+      return sendError(422, 'EXTRACTION_FAILED', failMsg);
+    }
+
+    const quiz = new Quiz({
+      title: title.trim(),
+      durationMinutes: parseInt(durationMinutes, 10),
+      questions: allQuestions,
+      isPublished: false,
+      isDraft: true,
+      folderIds: parsedFolderIds,
+      createdBy: req.user.id
+    });
+    await quiz.save();
+
+    let warningMsg = null;
+    if (failedPages.length > 0) {
+      warningMsg = `Quiz generated, but some pages failed to extract questions: ${failedPages.join(', ')}`;
+    }
+
+    res.write(`data: ${JSON.stringify({ type: 'success', quiz, extractedCount: allQuestions.length, warning: warningMsg })}\n\n`);
+    res.end();
 
   } catch (err) {
-    if (err.message === 'Only PDF files are allowed.') return res.status(400).json({ message: 'Only PDF files are accepted.' });
-    if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ message: 'PDF is too large. Maximum size is 10MB.' });
     console.error('Generate from PDF error:', err);
-    res.status(500).json({ message: 'Server error.', error: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Server error.', error: err.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', statusCode: 500, errorCode: 'SERVER_ERROR', message: err.message })}\n\n`);
+      res.end();
+    }
   }
 });
 

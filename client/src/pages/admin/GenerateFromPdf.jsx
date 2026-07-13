@@ -27,6 +27,7 @@ export default function GenerateFromPdf() {
 
   // State
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Extracting questions from content...');
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
 
@@ -75,42 +76,90 @@ export default function GenerateFromPdf() {
     }
 
     setError(''); setWarning(''); setLoading(true);
+    setLoadingMessage('Initializing extraction...');
     try {
-      let res;
-
       if (mode === 'text') {
-        res = await api.post('/generate/from-text', {
+        const res = await api.post('/generate/from-text', {
           text: pastedText,
           title,
           durationMinutes,
           folderIds: JSON.stringify(selectedFolderIds)
         });
+        if (res.data.warning) {
+          setWarning(res.data.warning);
+          setTimeout(() => navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`), 3000);
+        } else {
+          navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`);
+        }
       } else {
         const formData = new FormData();
         formData.append('pdf', file);
         formData.append('title', title);
         formData.append('durationMinutes', durationMinutes);
         formData.append('folderIds', JSON.stringify(selectedFolderIds));
-        res = await api.post('/generate/from-pdf', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 180000
-        });
-      }
 
-      if (res.data.warning) {
-        setWarning(res.data.warning);
-        setTimeout(() => navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`), 3000);
-      } else {
-        navigate(`/admin/quiz/${res.data.quiz._id}/answer-key`);
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${api.defaults.baseURL || ''}/generate/from-pdf`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw { response: { data: errData } };
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let partialLine = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = (partialLine + chunk).split('\n');
+          partialLine = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+            const payloadStr = trimmed.slice(6);
+            let payload;
+            try {
+              payload = JSON.parse(payloadStr);
+            } catch (e) {
+              console.error('Failed to parse SSE payload:', payloadStr);
+              continue;
+            }
+
+            if (payload.type === 'progress') {
+              setLoadingMessage(payload.message);
+            } else if (payload.type === 'error') {
+              throw { response: { data: { errorCode: payload.errorCode, message: payload.message } } };
+            } else if (payload.type === 'success') {
+              if (payload.warning) {
+                setWarning(payload.warning);
+                setTimeout(() => navigate(`/admin/quiz/${payload.quiz._id}/answer-key`), 3000);
+              } else {
+                navigate(`/admin/quiz/${payload.quiz._id}/answer-key`);
+              }
+            }
+          }
+        }
       }
     } catch (err) {
       const code = err.response?.data?.errorCode;
       if (code === 'RATE_LIMIT_RPM' || code === 'RATE_LIMIT_TPM') {
-        setError("Gemini is temporarily rate-limited — please wait a minute and try again.");
+        setError("NVIDIA NIM is temporarily rate-limited — please wait a minute and try again.");
       } else if (code === 'RATE_LIMIT_RPD') {
-        setError("Daily free-tier limit for Gemini reached. This resets in about 24 hours (Gemini's quota resets around midnight Pacific time). Try again tomorrow, or use a different Gemini API key/project in the meantime.");
+        setError("Daily free-tier limit for NVIDIA NIM reached. Try again tomorrow, or use a different NVIDIA API key in the meantime.");
       } else if (code === 'INVALID_KEY') {
-        setError("Gemini API key is invalid or not authorized. Please check the GEMINI_API_KEY environment variable on Render.");
+        setError("NVIDIA API key is invalid or not authorized. Please check the NVIDIA_API_KEY environment variable on Render.");
       } else {
         setError(err.response?.data?.message || 'Failed to generate quiz. Please try again.');
       }
@@ -131,7 +180,7 @@ export default function GenerateFromPdf() {
             <ThemeToggle />
             <span className="flex items-center gap-1.5 text-xs font-medium text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-3 py-1">
               <Sparkles className="w-3 h-3" />
-              Powered by Gemini AI
+              Powered by NVIDIA NIM
             </span>
           </div>
         </div>
@@ -143,7 +192,7 @@ export default function GenerateFromPdf() {
           <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <div>
             <p className="font-medium mb-0.5">How this works</p>
-            <p className="text-primary-400 text-xs">Gemini AI extracts all questions and options from your content. You then take a self-attempt to set the correct answers — the AI never guesses answers on your behalf.</p>
+            <p className="text-primary-400 text-xs">NVIDIA NIM extracts all questions and options from your content. You then take a self-attempt to set the correct answers — the AI never guesses answers on your behalf.</p>
           </div>
         </div>
 
@@ -167,7 +216,7 @@ export default function GenerateFromPdf() {
               <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
             </div>
             <h2 className="text-xl font-bold text-slate-100 mb-2">Extracting questions...</h2>
-            <p className="text-slate-400 text-sm max-w-xs mx-auto">Gemini AI is reading your content and identifying all multiple-choice questions.</p>
+            <p className="text-slate-400 text-sm max-w-md mx-auto">{loadingMessage}</p>
             <div className="mt-6 flex justify-center gap-1">
               {[0,1,2].map(i => (
                 <div key={i} className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />

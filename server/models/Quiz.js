@@ -4,7 +4,7 @@ const questionSchema = new mongoose.Schema({
   questionText: { type: String, required: true },
   options: [{ type: String, required: true }],
   correctAnswer: { type: String, required: false, default: '' }, // Optional for AI-generated drafts
-  language: { type: String, default: 'English' } // Language tag from Gemini extraction
+  language: { type: String, default: 'English' } // Language tag from NVIDIA NIM extraction
 });
 
 const quizSchema = new mongoose.Schema({
