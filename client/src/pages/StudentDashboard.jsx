@@ -4,9 +4,18 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Trophy, Clock, BookOpen, TrendingUp, ArrowLeft, ChevronRight, Zap } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function StudentDashboard() {
   const { user, logout } = useAuth();
+  const { isDark } = useTheme();
+
+  const chartStroke = isDark ? '#475569' : '#cbd5e1';
+  const chartTick = isDark ? '#94a3b8' : '#475569';
+  const tooltipBg = isDark ? '#1e293b' : '#ffffff';
+  const tooltipBorder = isDark ? '#334155' : '#cbd5e1';
+  const tooltipColor = isDark ? '#f1f5f9' : '#0f172a';
   const navigate = useNavigate();
   const [attempts, setAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,10 +53,13 @@ export default function StudentDashboard() {
             </button>
             <span className="text-xl font-bold text-slate-100">My Dashboard</span>
           </div>
-          <button onClick={() => navigate('/')} className="btn-secondary py-2 px-4 text-sm flex items-center gap-2">
-            <BookOpen className="w-4 h-4" />
-            Browse Quizzes
-          </button>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <button onClick={() => navigate('/')} className="btn-secondary py-2 px-4 text-sm flex items-center gap-2">
+              <BookOpen className="w-4 h-4" />
+              Browse Quizzes
+            </button>
+          </div>
         </div>
       </div>
 
@@ -82,10 +94,10 @@ export default function StudentDashboard() {
             <h2 className="text-lg font-semibold text-slate-100 mb-6">Score Trend (last 10 attempts)</h2>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chartData}>
-                <XAxis dataKey="name" stroke="#475569" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <YAxis domain={[0, 100]} stroke="#475569" tick={{ fontSize: 12, fill: '#94a3b8' }} unit="%" />
+                <XAxis dataKey="name" stroke={chartStroke} tick={{ fontSize: 12, fill: chartTick }} />
+                <YAxis domain={[0, 100]} stroke={chartStroke} tick={{ fontSize: 12, fill: chartTick }} unit="%" />
                 <Tooltip
-                  contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', color: '#f1f5f9' }}
+                  contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: '12px', color: tooltipColor }}
                   formatter={(val, _, props) => [`${val}%`, props.payload.quiz]}
                 />
                 <Line type="monotone" dataKey="score" stroke="#0ea5e9" strokeWidth={2} dot={{ fill: '#0ea5e9', r: 4 }} activeDot={{ r: 6 }} />

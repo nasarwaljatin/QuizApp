@@ -4,6 +4,7 @@ import api from '../api/axios';
 import ResultSummary from '../components/ResultSummary';
 import { QuestionReview } from '../components/QuestionItem';
 import { ArrowLeft, Home, RotateCcw } from 'lucide-react';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function ResultPage() {
   const { attemptId } = useParams();
@@ -54,9 +55,12 @@ export default function ResultPage() {
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm">Back to Quizzes</span>
           </button>
-          <button onClick={() => navigate('/dashboard')} className="btn-secondary py-2 px-4 text-sm">
-            My Dashboard
-          </button>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <button onClick={() => navigate('/dashboard')} className="btn-secondary py-2 px-4 text-sm">
+              My Dashboard
+            </button>
+          </div>
         </div>
       </div>
 

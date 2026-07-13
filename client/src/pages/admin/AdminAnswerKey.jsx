@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, Check, Edit3, Save, X, ChevronDown, ChevronUp, Globe, AlertTriangle } from 'lucide-react';
 import api from '../../api/axios';
+import ThemeToggle from '../../components/ThemeToggle';
 
 export default function AdminAnswerKey() {
   const { id } = useParams();
@@ -138,6 +139,7 @@ export default function AdminAnswerKey() {
               <p className="text-xs text-slate-500">Admin Answer-Key Mode · {answeredCount}/{questions.length} answered</p>
             </div>
           </div>
+          <ThemeToggle />
         </div>
 
         {/* Progress bar */}

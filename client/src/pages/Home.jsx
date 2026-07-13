@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import { Clock, BookOpen, ChevronRight, Search, LogOut, LayoutDashboard, Trophy, Folder } from 'lucide-react';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function Home() {
   const { user, logout } = useAuth();
@@ -53,6 +54,7 @@ export default function Home() {
               <LayoutDashboard className="w-4 h-4" />
               <span className="hidden sm:inline">Dashboard</span>
             </Link>
+            <ThemeToggle />
             <button onClick={handleLogout} className="text-slate-400 hover:text-red-400 transition-colors p-2">
               <LogOut className="w-4 h-4" />
             </button>

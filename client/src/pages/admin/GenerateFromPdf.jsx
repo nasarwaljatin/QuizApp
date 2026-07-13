@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Upload, FileText, ShieldCheck, Folder, X, Plus, AlertTriangle, Loader2, Sparkles, ClipboardPaste } from 'lucide-react';
 import api from '../../api/axios';
+import ThemeToggle from '../../components/ThemeToggle';
 
 export default function GenerateFromPdf() {
   const navigate = useNavigate();
@@ -126,10 +127,13 @@ export default function GenerateFromPdf() {
           </Link>
           <ShieldCheck className="w-5 h-5 text-accent-400" />
           <span className="text-xl font-bold text-slate-100">Generate Quiz with AI</span>
-          <span className="ml-auto flex items-center gap-1.5 text-xs font-medium text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-3 py-1">
-            <Sparkles className="w-3 h-3" />
-            Powered by Gemini AI
-          </span>
+          <div className="ml-auto flex items-center gap-3">
+            <ThemeToggle />
+            <span className="flex items-center gap-1.5 text-xs font-medium text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-3 py-1">
+              <Sparkles className="w-3 h-3" />
+              Powered by Gemini AI
+            </span>
+          </div>
         </div>
       </div>
 

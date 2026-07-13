@@ -5,6 +5,7 @@ import { useTimer } from '../hooks/useTimer';
 import Timer from '../components/Timer';
 import QuestionItem from '../components/QuestionItem';
 import { ArrowLeft, Send, AlertTriangle } from 'lucide-react';
+import ThemeToggle from '../components/ThemeToggle';
 
 // Fisher-Yates shuffle
 function shuffle(arr) {
@@ -128,7 +129,10 @@ export default function QuizPage() {
               <p className="text-xs text-slate-500">{answeredCount}/{shuffledQuestions.length} answered</p>
             </div>
           </div>
-          <Timer formattedTime={formattedTime} percentLeft={percentLeft} />
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Timer formattedTime={formattedTime} percentLeft={percentLeft} />
+          </div>
         </div>
 
         {/* Progress bar */}

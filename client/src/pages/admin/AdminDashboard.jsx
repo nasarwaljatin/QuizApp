@@ -4,9 +4,18 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Users, BookOpen, TrendingUp, Zap, ShieldCheck, LogOut, PlusCircle, ChevronRight, AlertTriangle, Folder } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
+import ThemeToggle from '../../components/ThemeToggle';
 
 export default function AdminDashboard() {
   const { logout } = useAuth();
+  const { isDark } = useTheme();
+
+  const chartStroke = isDark ? '#475569' : '#cbd5e1';
+  const chartTick = isDark ? '#94a3b8' : '#475569';
+  const tooltipBg = isDark ? '#1e293b' : '#ffffff';
+  const tooltipBorder = isDark ? '#334155' : '#cbd5e1';
+  const tooltipColor = isDark ? '#f1f5f9' : '#0f172a';
   const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -44,6 +53,7 @@ export default function AdminDashboard() {
               <BookOpen className="w-4 h-4" />
               Manage Quizzes
             </Link>
+            <ThemeToggle />
             <button onClick={handleLogout} className="text-slate-400 hover:text-red-400 p-2 transition-colors">
               <LogOut className="w-4 h-4" />
             </button>
@@ -87,10 +97,10 @@ export default function AdminDashboard() {
             <h2 className="text-lg font-semibold text-slate-100 mb-6">Attempts per Quiz</h2>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={chartData} barGap={4}>
-                <XAxis dataKey="name" stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                <YAxis stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                <XAxis dataKey="name" stroke={chartStroke} tick={{ fontSize: 11, fill: chartTick }} />
+                <YAxis stroke={chartStroke} tick={{ fontSize: 11, fill: chartTick }} />
                 <Tooltip
-                  contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', color: '#f1f5f9' }}
+                  contentStyle={{ background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: '12px', color: tooltipColor }}
                 />
                 <Bar dataKey="attempts" fill="#0ea5e9" radius={[6, 6, 0, 0]} name="Attempts" />
                 <Bar dataKey="avgScore" fill="#8b5cf6" radius={[6, 6, 0, 0]} name="Avg Score %" />

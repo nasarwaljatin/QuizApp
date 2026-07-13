@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api from '../../api/axios';
 import QuizForm from '../../components/QuizForm';
 import { Plus, Edit, Trash2, Eye, EyeOff, ShieldCheck, ArrowLeft, BookOpen, X, FileText, Sparkles, ChevronRight, Check } from 'lucide-react';
+import ThemeToggle from '../../components/ThemeToggle';
 
 export default function ManageQuizzes() {
   const navigate = useNavigate();
@@ -115,22 +116,25 @@ export default function ManageQuizzes() {
               {view === 'list' ? 'Manage Quizzes' : view === 'create' ? 'Create Quiz' : 'Edit Quiz'}
             </span>
           </div>
-          {view === 'list' && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigate('/admin/generate-from-pdf')}
-                className="btn-secondary py-2 px-3 text-sm flex items-center gap-2"
-              >
-                <Sparkles className="w-4 h-4 text-violet-400" />
-                <span className="hidden sm:inline">Generate from PDF</span>
-                <span className="sm:hidden">AI</span>
-              </button>
-              <button onClick={() => { setView('create'); setError(''); }} className="btn-primary py-2 px-4 text-sm flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">New Quiz</span>
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            {view === 'list' && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => navigate('/admin/generate-from-pdf')}
+                  className="btn-secondary py-2 px-3 text-sm flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4 text-violet-400" />
+                  <span className="hidden sm:inline">Generate from PDF</span>
+                  <span className="sm:hidden">AI</span>
+                </button>
+                <button onClick={() => { setView('create'); setError(''); }} className="btn-primary py-2 px-4 text-sm flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden sm:inline">New Quiz</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

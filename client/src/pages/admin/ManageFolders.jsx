@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../../api/axios';
 import { Folder, ArrowLeft, Trash2, ShieldCheck, Plus } from 'lucide-react';
+import ThemeToggle from '../../components/ThemeToggle';
 
 export default function ManageFolders() {
   const navigate = useNavigate();
@@ -64,6 +65,7 @@ export default function ManageFolders() {
             <ShieldCheck className="w-5 h-5 text-accent-400" />
             <span className="text-xl font-bold text-slate-100">Manage Folders</span>
           </div>
+          <ThemeToggle />
         </div>
       </div>
 

@@ -4,6 +4,40 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-slate-50: 15 23 42;      /* slate-900 */
+  --color-slate-100: 15 23 42;     /* slate-900 */
+  --color-slate-200: 51 65 85;      /* slate-700 */
+  --color-slate-300: 71 85 105;     /* slate-600 */
+  --color-slate-400: 100 116 139;   /* slate-500 */
+  --color-slate-500: 148 163 184;   /* slate-400 */
+  --color-slate-600: 203 213 225;   /* slate-300 */
+  --color-slate-700: 226 232 240;   /* slate-200 */
+  --color-slate-800: 241 245 249;   /* slate-100 */
+  --color-slate-900: 255 255 255;   /* white */
+  --color-slate-950: 248 250 252;   /* slate-50 background */
+
+  --glass-bg: rgba(15, 23, 42, 0.05);
+  --glass-border: rgba(15, 23, 42, 0.1);
+}
+
+.dark {
+  --color-slate-50: 248 250 252;   /* slate-50 */
+  --color-slate-100: 241 245 249;  /* slate-100 */
+  --color-slate-200: 226 232 240;  /* slate-200 */
+  --color-slate-300: 203 213 225;  /* slate-300 */
+  --color-slate-400: 148 163 184;  /* slate-400 */
+  --color-slate-500: 100 116 139;  /* slate-500 */
+  --color-slate-600: 71 85 105;    /* slate-600 */
+  --color-slate-700: 51 65 85;     /* slate-700 */
+  --color-slate-800: 30 41 59;     /* slate-800 */
+  --color-slate-900: 15 23 42;     /* slate-900 */
+  --color-slate-950: 2 6 23;       /* slate-950 */
+
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+}
+
 @layer base {
   body {
     @apply bg-slate-950 text-slate-100 font-sans;
@@ -11,6 +45,10 @@
 
   * {
     @apply box-border;
+  }
+
+  body, nav, header, footer, .card, .input, .btn-secondary, td, th, tr, button {
+    transition: background-color 200ms ease-in-out, border-color 200ms ease-in-out, color 200ms ease-in-out;
   }
 }
 
@@ -52,7 +90,9 @@
   }
 
   .glass {
-    @apply bg-white/5 backdrop-blur-sm border border-white/10;
+    background-color: var(--glass-bg);
+    border-color: var(--glass-border);
+    @apply backdrop-blur-sm border;
   }
 }
 
@@ -61,12 +101,12 @@
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: rgb(var(--color-slate-950));
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgb(var(--color-slate-800));
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgb(var(--color-slate-700));
 }

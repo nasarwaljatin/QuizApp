@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, Check, Globe, AlertTriangle, BookOpen, X, Rocket } from 'lucide-react';
 import api from '../../api/axios';
+import ThemeToggle from '../../components/ThemeToggle';
 
 export default function AdminAnswerKeyReview() {
   const { id } = useParams();
@@ -86,6 +87,9 @@ export default function AdminAnswerKeyReview() {
           <div>
             <p className="text-xl font-bold text-slate-100">Review & Publish</p>
             <p className="text-xs text-slate-500">{quiz.title}</p>
+          </div>
+          <div className="ml-auto">
+            <ThemeToggle />
           </div>
         </div>
       </div>
