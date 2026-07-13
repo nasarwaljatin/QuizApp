@@ -76,6 +76,107 @@ router.get('/my', verifyStudent, async (req, res) => {
   }
 });
 
+// GET /api/attempts/my/analytics — detailed performance analytics for logged-in student
+router.get('/my/analytics', verifyStudent, async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const studentObjId = new mongoose.Types.ObjectId(req.user.id);
+
+    // 1. Fetch all attempts with quiz info for trend computation
+    const attempts = await Attempt.find({ studentId: req.user.id })
+      .populate({
+        path: 'quizId',
+        select: 'title durationMinutes folderIds',
+        populate: { path: 'folderIds', select: 'name' }
+      })
+      .sort({ submittedAt: 1 })
+      .lean();
+
+    if (attempts.length === 0) {
+      return res.json({
+        accuracyTrend: [],
+        folderPerformance: [],
+        weakestFolder: null,
+        timingMetrics: null,
+        totalAttempts: 0
+      });
+    }
+
+    // 2. Accuracy trend over time (each attempt as a data point)
+    const accuracyTrend = attempts.map(a => ({
+      date: a.submittedAt,
+      quizTitle: a.quizId?.title || 'Unknown Quiz',
+      score: a.score,
+      totalQuestions: a.totalQuestions,
+      percentage: a.totalQuestions > 0 ? parseFloat(((a.score / a.totalQuestions) * 100).toFixed(1)) : 0
+    }));
+
+    // 3. Folder-wise performance
+    const folderMap = {};
+    attempts.forEach(a => {
+      const folders = a.quizId?.folderIds || [];
+      const pct = a.totalQuestions > 0 ? (a.score / a.totalQuestions) * 100 : 0;
+
+      if (folders.length === 0) {
+        // Uncategorized
+        if (!folderMap['uncategorized']) folderMap['uncategorized'] = { name: 'Uncategorized', scores: [] };
+        folderMap['uncategorized'].scores.push(pct);
+      } else {
+        folders.forEach(f => {
+          const folderId = f._id?.toString() || 'unknown';
+          const folderName = f.name || 'Unknown';
+          if (!folderMap[folderId]) folderMap[folderId] = { name: folderName, scores: [] };
+          folderMap[folderId].scores.push(pct);
+        });
+      }
+    });
+
+    const folderPerformance = Object.entries(folderMap).map(([id, data]) => ({
+      folderId: id,
+      folderName: data.name,
+      avgPercentage: parseFloat((data.scores.reduce((s, v) => s + v, 0) / data.scores.length).toFixed(1)),
+      attemptCount: data.scores.length
+    })).sort((a, b) => b.avgPercentage - a.avgPercentage);
+
+    // 4. Weakest folder
+    const weakestFolder = folderPerformance.length > 0
+      ? folderPerformance[folderPerformance.length - 1]
+      : null;
+
+    // 5. Timing metrics
+    let totalTimePerQuestion = 0;
+    let totalAllottedPerQuestion = 0;
+    let validTimingCount = 0;
+
+    attempts.forEach(a => {
+      if (a.totalQuestions > 0 && a.quizId?.durationMinutes) {
+        totalTimePerQuestion += a.timeTakenSeconds / a.totalQuestions;
+        totalAllottedPerQuestion += (a.quizId.durationMinutes * 60) / a.totalQuestions;
+        validTimingCount++;
+      }
+    });
+
+    const timingMetrics = validTimingCount > 0 ? {
+      avgSecondsPerQuestion: parseFloat((totalTimePerQuestion / validTimingCount).toFixed(1)),
+      avgAllottedSecondsPerQuestion: parseFloat((totalAllottedPerQuestion / validTimingCount).toFixed(1)),
+      rushingIndicator: (totalTimePerQuestion / validTimingCount) < (totalAllottedPerQuestion / validTimingCount) * 0.5
+        ? 'rushing' : (totalTimePerQuestion / validTimingCount) > (totalAllottedPerQuestion / validTimingCount) * 0.9
+        ? 'close_to_limit' : 'normal'
+    } : null;
+
+    res.json({
+      accuracyTrend,
+      folderPerformance,
+      weakestFolder,
+      timingMetrics,
+      totalAttempts: attempts.length
+    });
+  } catch (err) {
+    console.error('Analytics error:', err);
+    res.status(500).json({ message: 'Server error.', error: err.message });
+  }
+});
+
 // GET /api/attempts/my/:attemptId — get specific attempt with full answer review
 router.get('/my/:attemptId', verifyStudent, async (req, res) => {
   try {

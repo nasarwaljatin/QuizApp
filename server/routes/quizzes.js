@@ -1,8 +1,100 @@
 const express = require('express');
 const router = express.Router();
 const Quiz = require('../models/Quiz');
+const Attempt = require('../models/Attempt');
+const User = require('../models/User');
 const verifyStudent = require('../middleware/verifyStudent');
 const verifyAdmin = require('../middleware/verifyAdmin');
+
+// ─── LEADERBOARD ──────────────────────────────────────────────────────────────
+
+// GET /api/quizzes/:quizId/leaderboard — ranked student standings for a quiz
+router.get('/:quizId/leaderboard', verifyStudent, async (req, res) => {
+  try {
+    const { quizId } = req.params;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+
+    const quiz = await Quiz.findById(quizId).select('title').lean();
+    if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
+
+    // Aggregation: best attempt per student, sorted by score desc, time asc
+    const pipeline = [
+      { $match: { quizId: require('mongoose').Types.ObjectId.createFromHexString(quizId) } },
+      { $sort: { score: -1, timeTakenSeconds: 1, submittedAt: 1 } },
+      {
+        $group: {
+          _id: '$studentId',
+          score: { $first: '$score' },
+          totalQuestions: { $first: '$totalQuestions' },
+          totalMarks: { $first: '$totalMarks' },
+          timeTakenSeconds: { $first: '$timeTakenSeconds' },
+          submittedAt: { $first: '$submittedAt' },
+          attemptId: { $first: '$_id' }
+        }
+      },
+      { $sort: { score: -1, timeTakenSeconds: 1 } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'userInfo'
+        }
+      },
+      { $unwind: '$userInfo' },
+      {
+        $project: {
+          studentId: '$_id',
+          studentName: '$userInfo.name',
+          score: 1,
+          totalQuestions: 1,
+          totalMarks: 1,
+          timeTakenSeconds: 1,
+          submittedAt: 1,
+          attemptId: 1
+        }
+      }
+    ];
+
+    const allRanked = await Attempt.aggregate(pipeline);
+    const totalStudents = allRanked.length;
+
+    // Assign ranks (1-indexed)
+    const rankedList = allRanked.map((entry, idx) => ({
+      ...entry,
+      rank: idx + 1,
+      percentile: totalStudents > 0 ? parseFloat((((totalStudents - (idx + 1)) / totalStudents) * 100).toFixed(1)) : 0,
+      percentage: entry.totalQuestions > 0 ? parseFloat(((entry.score / entry.totalQuestions) * 100).toFixed(1)) : 0
+    }));
+
+    // Find current student's rank
+    const myEntry = rankedList.find(e => e.studentId.toString() === req.user.id);
+
+    // Paginate
+    const start = (page - 1) * limit;
+    const paginatedList = rankedList.slice(start, start + limit);
+
+    res.json({
+      quizTitle: quiz.title,
+      totalStudents,
+      leaderboard: paginatedList,
+      myRank: myEntry?.rank || null,
+      myPercentile: myEntry?.percentile ?? null,
+      myScore: myEntry?.score ?? null,
+      myTimeTaken: myEntry?.timeTakenSeconds ?? null,
+      pagination: {
+        page,
+        limit,
+        totalPages: Math.ceil(totalStudents / limit),
+        hasMore: start + limit < totalStudents
+      }
+    });
+  } catch (err) {
+    console.error('Leaderboard error:', err);
+    res.status(500).json({ message: 'Server error.', error: err.message });
+  }
+});
 
 // ─── STUDENT ROUTES ───────────────────────────────────────────────────────────
 
