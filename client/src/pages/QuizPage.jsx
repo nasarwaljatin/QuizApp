@@ -203,6 +203,7 @@ export default function QuizPage() {
         <div className="md:col-span-3 space-y-6">
           {currentQuestion && (
             <QuestionItem
+              key={currentQuestion._id}
               question={currentQuestion}
               index={currentIndex}
               selected={answers[currentQuestion.questionText] || null}
