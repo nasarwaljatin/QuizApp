@@ -43,6 +43,18 @@ export default function QuestionItem({ question, index, selected, onSelect }) {
           );
         })}
       </div>
+
+      {selected && (
+        <div className="mt-4 pl-11 flex justify-start">
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            className="text-xs text-slate-500 hover:text-red-400 transition-colors underline font-medium"
+          >
+            Clear Response
+          </button>
+        </div>
+      )}
     </div>
   );
 }
