@@ -204,6 +204,13 @@ Return this EXACT JSON structure:
 // ── POST /api/generate/from-text — paste raw question text ────────────────────
 router.post('/from-text', verifyAdmin, async (req, res) => {
   try {
+    if (!process.env.NVIDIA_API_KEY) {
+      return res.status(401).json({
+        errorCode: 'INVALID_KEY',
+        message: 'NVIDIA_API_KEY is not set on the server. Please add it to your environment variables.'
+      });
+    }
+
     const { text, title, durationMinutes, folderIds } = req.body;
 
     if (!text || !text.trim() || text.trim().length < 20) {
@@ -255,6 +262,13 @@ router.post('/from-text', verifyAdmin, async (req, res) => {
 // ── POST /api/generate/from-pdf — upload PDF file ─────────────────────────────
 router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => {
   try {
+    if (!process.env.NVIDIA_API_KEY) {
+      return res.status(401).json({
+        errorCode: 'INVALID_KEY',
+        message: 'NVIDIA_API_KEY is not set on the server. Please check the environment variables.'
+      });
+    }
+
     if (!req.file) {
       return res.status(400).json({ message: 'Please upload a PDF file.' });
     }
@@ -326,6 +340,14 @@ router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => 
         if (ocrResponse.statusCode !== 200) {
           const errorInfo = classifyNvidiaError(ocrResponse.statusCode, ocrResponse.body);
           console.warn(`[Page ${i + 1}] OCR model failed:`, errorInfo.message);
+
+          if (errorInfo.code === 'INVALID_KEY') {
+            return sendError(401, 'INVALID_KEY', 'NVIDIA API key is invalid or unauthorized. Please verify the NVIDIA_API_KEY on the server.');
+          }
+          if (errorInfo.code === 'RATE_LIMIT_RPD') {
+            return sendError(429, 'RATE_LIMIT_RPD', 'Daily quota for NVIDIA NIM has been reached. Please check build.nvidia.com.');
+          }
+
           failedPages.push(i + 1);
           continue;
         }
@@ -356,6 +378,14 @@ router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => 
         if (chatResponse.statusCode !== 200) {
           const errorInfo = classifyNvidiaError(chatResponse.statusCode, chatResponse.body);
           console.warn(`[Page ${i + 1}] Structuring model failed:`, errorInfo.message);
+
+          if (errorInfo.code === 'INVALID_KEY') {
+            return sendError(401, 'INVALID_KEY', 'NVIDIA API key is invalid or unauthorized. Please verify the NVIDIA_API_KEY on the server.');
+          }
+          if (errorInfo.code === 'RATE_LIMIT_RPD') {
+            return sendError(429, 'RATE_LIMIT_RPD', 'Daily quota for NVIDIA NIM has been reached. Please check build.nvidia.com.');
+          }
+
           failedPages.push(i + 1);
           continue;
         }
