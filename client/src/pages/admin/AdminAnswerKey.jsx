@@ -86,7 +86,8 @@ export default function AdminAnswerKey() {
   const startEdit = useCallback((origIdx) => {
     setEditBuffer({
       questionText: questions[origIdx].questionText,
-      options: [...questions[origIdx].options]
+      options: [...questions[origIdx].options],
+      questionType: questions[origIdx].questionType || 'mcq'
     });
     setEditingIndex(origIdx);
   }, [questions]);
@@ -95,12 +96,23 @@ export default function AdminAnswerKey() {
     setQuestions(prev => prev.map((q, i) => i === origIdx ? {
       ...q,
       questionText: editBuffer.questionText,
-      options: editBuffer.options
+      options: editBuffer.options,
+      questionType: editBuffer.questionType || 'mcq'
     } : q));
-    // If the current answer for this question doesn't exist in the new options, clear it
+    // If MCQ and the current answer doesn't exist in the new options, clear it
     const currentAnswer = answers[origIdx];
-    if (currentAnswer && !editBuffer.options.includes(currentAnswer)) {
-      setAnswers(prev => { const n = { ...prev }; delete n[origIdx]; return n; });
+    const isMCQ = (editBuffer.questionType || 'mcq') === 'mcq';
+    if (isMCQ && currentAnswer) {
+      if (Array.isArray(currentAnswer)) {
+        const remaining = currentAnswer.filter(ans => editBuffer.options.includes(ans));
+        if (remaining.length === 0) {
+          setAnswers(prev => { const n = { ...prev }; delete n[origIdx]; return n; });
+        } else {
+          setAnswers(prev => ({ ...prev, [origIdx]: remaining }));
+        }
+      } else if (!editBuffer.options.includes(currentAnswer)) {
+        setAnswers(prev => { const n = { ...prev }; delete n[origIdx]; return n; });
+      }
     }
     setEditingIndex(null);
   }, [editBuffer, answers]);
@@ -138,7 +150,8 @@ export default function AdminAnswerKey() {
       const updatedQuestions = questions.map((q, i) => ({
         _id: q._id,
         questionText: q.questionText,
-        options: q.options
+        options: q.options,
+        questionType: q.questionType || 'mcq'
       }));
 
       await api.post(`/quizzes/${id}/set-answer-key`, {
@@ -322,37 +335,59 @@ export default function AdminAnswerKey() {
                           onChange={e => setEditBuffer(prev => ({ ...prev, questionText: e.target.value }))}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <label className="label text-xs">Options</label>
-                        {editBuffer.options.map((opt, oi) => (
-                          <div key={oi} className="flex gap-2">
-                            <input
-                              className="input flex-1 text-sm"
-                              value={opt}
-                              onChange={e => setEditBuffer(prev => ({
-                                ...prev,
-                                options: prev.options.map((o, j) => j === oi ? e.target.value : o)
-                              }))}
-                            />
-                            {editBuffer.options.length > 2 && (
-                              <button
-                                type="button"
-                                onClick={() => setEditBuffer(prev => ({ ...prev, options: prev.options.filter((_, j) => j !== oi) }))}
-                                className="text-red-400 hover:text-red-300 p-2"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        {editBuffer.options.length < 6 && (
-                          <button
-                            type="button"
-                            onClick={() => setEditBuffer(prev => ({ ...prev, options: [...prev.options, ''] }))}
-                            className="text-xs text-primary-400 hover:text-primary-300"
-                          >+ Add option</button>
-                        )}
+                      <div>
+                        <label className="label text-xs">Question Type</label>
+                        <select
+                          className="input text-sm py-1.5"
+                          value={editBuffer.questionType || 'mcq'}
+                          onChange={e => {
+                            const newType = e.target.value;
+                            setEditBuffer(prev => ({
+                              ...prev,
+                              questionType: newType,
+                              options: newType === 'mcq' ? (prev.options.length >= 2 ? prev.options : ['Option A', 'Option B']) : []
+                            }));
+                          }}
+                        >
+                          <option value="mcq">Multiple Choice (MCQ)</option>
+                          <option value="integer">Integer Type (Numeric)</option>
+                          <option value="text">Short Answer (Text)</option>
+                        </select>
                       </div>
+                      
+                      {(editBuffer.questionType === 'mcq' || !editBuffer.questionType) && (
+                        <div className="space-y-2">
+                          <label className="label text-xs">Options</label>
+                          {editBuffer.options.map((opt, oi) => (
+                            <div key={oi} className="flex gap-2">
+                              <input
+                                className="input flex-1 text-sm"
+                                value={opt}
+                                onChange={e => setEditBuffer(prev => ({
+                                  ...prev,
+                                  options: prev.options.map((o, j) => j === oi ? e.target.value : o)
+                                }))}
+                              />
+                              {editBuffer.options.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditBuffer(prev => ({ ...prev, options: prev.options.filter((_, j) => j !== oi) }))}
+                                  className="text-red-400 hover:text-red-300 p-2"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {editBuffer.options.length < 6 && (
+                            <button
+                              type="button"
+                              onClick={() => setEditBuffer(prev => ({ ...prev, options: [...prev.options, ''] }))}
+                              className="text-xs text-primary-400 hover:text-primary-300"
+                            >+ Add option</button>
+                          )}
+                        </div>
+                      )}
                       <div className="flex gap-2 pt-1">
                         <button
                           type="button"
@@ -372,50 +407,87 @@ export default function AdminAnswerKey() {
                     </div>
                   ) : (
                     /* ── Answer Selection Mode ── */
-                     <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                    <div className="space-y-3" onClick={e => e.stopPropagation()}>
                       {currentQ.imageUrl && (
                         <div className="mb-4 max-w-xs rounded-xl overflow-hidden border border-slate-700 bg-slate-800/40 p-2">
                           <img src={currentQ.imageUrl} alt="Question diagram" className="max-h-48 object-contain rounded-lg" />
                         </div>
                       )}
-                      <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
-                        {currentQ.allowMultipleCorrect ? 'Select all correct answers (checkboxes):' : 'Select the correct answer:'}
-                      </p>
-                      {currentQ.options.map((option, oi) => {
-                        const isSelected = currentQ.allowMultipleCorrect
-                          ? (Array.isArray(selectedAnswer) && selectedAnswer.includes(option))
-                          : (selectedAnswer === option);
-                        
-                        const handleOptionClick = () => {
-                          if (currentQ.allowMultipleCorrect) {
-                            const currentSelected = Array.isArray(selectedAnswer) ? selectedAnswer : (selectedAnswer ? [selectedAnswer] : []);
-                            const newSelected = currentSelected.includes(option)
-                              ? currentSelected.filter(o => o !== option)
-                              : [...currentSelected, option];
-                            setAnswers(prev => ({ ...prev, [origIdx]: newSelected }));
-                          } else {
-                            setAnswers(prev => ({ ...prev, [origIdx]: option }));
-                          }
-                        };
+                      
+                      {(currentQ.questionType === 'integer' || currentQ.questionType === 'text') ? (
+                        /* Direct Input Answer (integer or text) */
+                        <div className="space-y-3">
+                          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+                            Enter the correct {currentQ.questionType === 'integer' ? 'number' : 'text'}:
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              type={currentQ.questionType === 'integer' ? 'number' : 'text'}
+                              className="input text-sm flex-1"
+                              value={selectedAnswer || ''}
+                              placeholder={currentQ.questionType === 'integer' ? 'e.g. 42' : 'e.g. photosynthesis'}
+                              onChange={e => setAnswers(prev => ({ ...prev, [origIdx]: e.target.value }))}
+                            />
+                            {currentQ.suggestedAnswer && (
+                              <button
+                                type="button"
+                                onClick={() => setAnswers(prev => ({ ...prev, [origIdx]: currentQ.suggestedAnswer }))}
+                                className="btn-secondary text-xs px-3 py-2 flex items-center gap-1.5 transition-all"
+                                title="Pre-fill with AI suggestion"
+                              >
+                                Use Suggestion ({currentQ.suggestedAnswer})
+                              </button>
+                            )}
+                          </div>
+                          {currentQ.suggestedAnswer && (
+                            <p className="text-[11px] text-slate-500">
+                              <span className="font-semibold text-primary-400">AI suggestion:</span> {currentQ.suggestedAnswer} — verify before confirming
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        /* MCQ options */
+                        <div className="space-y-2">
+                          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+                            {currentQ.allowMultipleCorrect ? 'Select all correct answers (checkboxes):' : 'Select the correct answer:'}
+                          </p>
+                          {currentQ.options.map((option, oi) => {
+                            const isSelected = currentQ.allowMultipleCorrect
+                              ? (Array.isArray(selectedAnswer) && selectedAnswer.includes(option))
+                              : (selectedAnswer === option);
+                            
+                            const handleOptionClick = () => {
+                              if (currentQ.allowMultipleCorrect) {
+                                const currentSelected = Array.isArray(selectedAnswer) ? selectedAnswer : (selectedAnswer ? [selectedAnswer] : []);
+                                const newSelected = currentSelected.includes(option)
+                                  ? currentSelected.filter(o => o !== option)
+                                  : [...currentSelected, option];
+                                setAnswers(prev => ({ ...prev, [origIdx]: newSelected }));
+                              } else {
+                                setAnswers(prev => ({ ...prev, [origIdx]: option }));
+                              }
+                            };
 
-                        return (
-                          <button
-                            key={oi}
-                            type="button"
-                            onClick={handleOptionClick}
-                            className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all duration-200 flex items-center gap-3 ${
-                              isSelected
-                                ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
-                                : 'border-slate-700 bg-slate-800/40 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
-                            }`}
-                          >
-                            <span className={`w-5 h-5 border flex-shrink-0 flex items-center justify-center ${currentQ.allowMultipleCorrect ? 'rounded' : 'rounded-full'} ${isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
-                              {isSelected && <Check className="w-3 h-3 text-white" />}
-                            </span>
-                            {option}
-                          </button>
-                        );
-                      })}
+                            return (
+                              <button
+                                key={oi}
+                                type="button"
+                                onClick={handleOptionClick}
+                                className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all duration-200 flex items-center gap-3 ${
+                                  isSelected
+                                    ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
+                                    : 'border-slate-700 bg-slate-800/40 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
+                                }`}
+                              >
+                                <span className={`w-5 h-5 border flex-shrink-0 flex items-center justify-center ${currentQ.allowMultipleCorrect ? 'rounded' : 'rounded-full'} ${isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
+                                  {isSelected && <Check className="w-3 h-3 text-white" />}
+                                </span>
+                                {option}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

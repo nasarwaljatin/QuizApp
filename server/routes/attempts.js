@@ -120,14 +120,29 @@ router.post('/', verifyStudent, async (req, res) => {
           }
         }
       } else {
-        // Single-correct logic
-        if (selectedAnswer === q.correctAnswer) {
-          isCorrect = true;
-          pointsAwarded = weight;
+        // Single-correct, integer, or text logic
+        const studentAns = (selectedAnswer || '').trim();
+        const correctAns = (q.correctAnswer || '').trim();
+
+        if (q.questionType === 'text') {
+          if (studentAns.toLowerCase() === correctAns.toLowerCase()) {
+            isCorrect = true;
+            pointsAwarded = weight;
+          } else {
+            isIncorrect = true;
+            isCorrect = false;
+            pointsAwarded = 0;
+          }
         } else {
-          isIncorrect = true;
-          isCorrect = false;
-          pointsAwarded = 0;
+          // mcq or integer: exact match comparison
+          if (studentAns === correctAns) {
+            isCorrect = true;
+            pointsAwarded = weight;
+          } else {
+            isIncorrect = true;
+            isCorrect = false;
+            pointsAwarded = 0;
+          }
         }
       }
 

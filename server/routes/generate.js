@@ -148,19 +148,12 @@ const handleExtractedQuestions = async (textContent, { title, durationMinutes, p
   }
 
   if (!extractedData.questions || !Array.isArray(extractedData.questions) || extractedData.questions.length === 0) {
-    return res.status(422).json({ message: 'No questions could be extracted. Make sure your content contains multiple-choice questions.' });
+    return res.status(422).json({ message: 'No questions could be extracted. Please make sure the content contains valid questions.' });
   }
 
-  const validQuestions = extractedData.questions.filter(q =>
-    q.questionText && typeof q.questionText === 'string' && q.questionText.trim() &&
-    Array.isArray(q.options) && q.options.length >= 2 &&
-    q.options.every(o => typeof o === 'string' && o.trim())
-  ).map(q => ({
-    questionText: q.questionText.trim(),
-    options: q.options.map(o => o.trim()),
-    language: q.language || 'English',
-    correctAnswer: ''
-  }));
+  const validQuestions = extractedData.questions
+    .map(validateAndFormatQuestion)
+    .filter(q => q !== null);
 
   if (validQuestions.length === 0) {
     return res.status(422).json({ message: 'All extracted questions failed validation. Check the content format.' });
@@ -180,22 +173,72 @@ const handleExtractedQuestions = async (textContent, { title, durationMinutes, p
   return res.status(201).json({ quiz, extractedCount: validQuestions.length, warning: null });
 };
 
+// Helper to validate and format each extracted question dynamically based on its classified type
+const validateAndFormatQuestion = (q) => {
+  if (!q || !q.questionText || typeof q.questionText !== 'string' || !q.questionText.trim()) {
+    return null;
+  }
+
+  // Normalize question type
+  let type = q.questionType;
+  if (!type || typeof type !== 'string') {
+    type = 'mcq';
+  }
+  type = type.toLowerCase().trim();
+  if (type !== 'mcq' && type !== 'integer' && type !== 'text') {
+    type = 'mcq';
+  }
+
+  // Options normalization
+  let options = [];
+  if (type === 'mcq') {
+    if (Array.isArray(q.options) && q.options.length >= 2 && q.options.every(o => typeof o === 'string' && o.trim())) {
+      options = q.options.map(o => o.trim());
+    } else {
+      // Fallback options for low confidence MCQ missing options due to poor OCR
+      options = Array.isArray(q.options) && q.options.length > 0
+        ? q.options.filter(o => typeof o === 'string' && o.trim()).map(o => o.trim())
+        : [];
+      if (options.length < 2) {
+        options = ['Option A', 'Option B'];
+      }
+    }
+  }
+
+  return {
+    questionText: q.questionText.trim(),
+    questionType: type,
+    options: options,
+    imageUrl: '',
+    suggestedAnswer: q.suggestedAnswer ? String(q.suggestedAnswer).trim() : '',
+    language: q.language || 'English',
+    correctAnswer: '',
+    correctAnswers: []
+  };
+};
+
 // ── Shared extraction prompt ───────────────────────────────────────────────────
-const EXTRACTION_PROMPT = `You are an expert quiz extractor. Extract ALL multiple-choice questions from the provided content.
+const EXTRACTION_PROMPT = `You are an expert quiz extractor. Extract ALL questions from the provided content.
 
 STRICT RULES:
 1. Return ONLY valid JSON — no markdown, no prose, no code blocks, no explanation.
-2. Do NOT determine or guess the correct answer. Leave correct answers completely out.
-3. Each question MUST have at least 2 options and at most 6 options.
-4. Detect the language of each question (e.g. "English", "Hindi", "Gujarati") and include it in the language field.
-5. Clean up any formatting artifacts. Skip incomplete questions.
+2. Classify each question's type:
+   - "mcq": Multiple-choice question with options. Populated "options" array is required.
+   - "integer": A numeric answer question with no options (e.g. "Find the value of...", "Calculate the resistance...", "What is the sum..."). Do NOT provide "options".
+   - "text": A short text/word/phrase answer with no options and no numeric expectation (e.g. fill-in-the-blank or naming questions). Do NOT provide "options".
+3. If you cannot determine the type or if options are ambiguous, default to "mcq" with options.
+4. Do NOT determine or guess the correct answer for grading. However, if the source content includes a separate answer key section (like answers listed at the end of the document), extract the answer value for each question and save it ONLY in the "suggestedAnswer" field. Never set correct answers in other fields. If no answer key is present, leave "suggestedAnswer" empty ("").
+5. Detect the language of each question (e.g. "English", "Hindi", "Gujarati") and include it in the "language" field.
+6. Clean up any formatting artifacts. Skip incomplete questions.
 
 Return this EXACT JSON structure:
 {
   "questions": [
     {
       "questionText": "full question text here",
-      "options": ["option A text", "option B text", "option C text", "option D text"],
+      "questionType": "mcq", // "mcq" | "integer" | "text"
+      "options": ["option A text", "option B text", "option C text", "option D text"], // only include if questionType is "mcq"
+      "suggestedAnswer": "answer value from key if present, otherwise empty string",
       "language": "English"
     }
   ]
@@ -228,7 +271,7 @@ router.post('/from-text', verifyAdmin, async (req, res) => {
     const chatMessages = [
       {
         role: "system",
-        content: "You are an expert system that extracts multiple-choice questions from raw text and formats them as strict JSON."
+        content: "You are an expert system that extracts questions (MCQ, integer-type, and text-type) from raw text and formats them as strict JSON."
       },
       {
         role: "user",
@@ -365,7 +408,7 @@ router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => 
         const chatMessages = [
           {
             role: "system",
-            content: "You are an expert system that extracts multiple-choice questions from raw OCR text and formats them as strict JSON."
+            content: "You are an expert system that extracts questions (MCQ, integer-type, and text-type) from raw OCR text and formats them as strict JSON."
           },
           {
             role: "user",
@@ -412,17 +455,9 @@ router.post('/from-pdf', verifyAdmin, upload.single('pdf'), async (req, res) => 
 
         if (extractedData?.questions && Array.isArray(extractedData.questions)) {
           extractedData.questions.forEach(q => {
-            if (
-              q.questionText && typeof q.questionText === 'string' && q.questionText.trim() &&
-              Array.isArray(q.options) && q.options.length >= 2 &&
-              q.options.every(o => typeof o === 'string' && o.trim())
-            ) {
-              allQuestions.push({
-                questionText: q.questionText.trim(),
-                options: q.options.map(o => o.trim()),
-                language: q.language || 'English',
-                correctAnswer: ''
-              });
+            const formatted = validateAndFormatQuestion(q);
+            if (formatted) {
+              allQuestions.push(formatted);
             }
           });
         }
@@ -604,17 +639,9 @@ router.post('/add-to-quiz/:quizId', verifyAdmin, upload.single('pdf'), async (re
 
           if (extractedData?.questions && Array.isArray(extractedData.questions)) {
             extractedData.questions.forEach(q => {
-              if (
-                q.questionText && typeof q.questionText === 'string' && q.questionText.trim() &&
-                Array.isArray(q.options) && q.options.length >= 2 &&
-                q.options.every(o => typeof o === 'string' && o.trim())
-              ) {
-                allQuestions.push({
-                  questionText: q.questionText.trim(),
-                  options: q.options.map(o => o.trim()),
-                  language: q.language || 'English',
-                  correctAnswer: ''
-                });
+              const formatted = validateAndFormatQuestion(q);
+              if (formatted) {
+                allQuestions.push(formatted);
               }
             });
           }
@@ -657,7 +684,7 @@ router.post('/add-to-quiz/:quizId', verifyAdmin, upload.single('pdf'), async (re
       const chatMessages = [
         {
           role: "system",
-          content: "You are an expert system that extracts multiple-choice questions from raw text and formats them as strict JSON."
+          content: "You are an expert system that extracts questions (MCQ, integer-type, and text-type) from raw text and formats them as strict JSON."
         },
         {
           role: "user",
@@ -692,16 +719,9 @@ router.post('/add-to-quiz/:quizId', verifyAdmin, upload.single('pdf'), async (re
         return res.status(422).json({ message: 'No questions could be extracted.' });
       }
 
-      const validQuestions = extractedData.questions.filter(q =>
-        q.questionText && typeof q.questionText === 'string' && q.questionText.trim() &&
-        Array.isArray(q.options) && q.options.length >= 2 &&
-        q.options.every(o => typeof o === 'string' && o.trim())
-      ).map(q => ({
-        questionText: q.questionText.trim(),
-        options: q.options.map(o => o.trim()),
-        language: q.language || 'English',
-        correctAnswer: ''
-      }));
+      const validQuestions = extractedData.questions
+        .map(validateAndFormatQuestion)
+        .filter(q => q !== null);
 
       if (validQuestions.length === 0) {
         return res.status(422).json({ message: 'All extracted questions failed validation.' });

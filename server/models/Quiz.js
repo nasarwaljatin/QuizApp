@@ -12,6 +12,8 @@ const questionSchema = new mongoose.Schema({
   marksWeight: { type: Number, default: 1 },
   isOptional: { type: Boolean, default: false },
   explanationText: { type: String, default: '' },
+  questionType: { type: String, enum: ['mcq', 'integer', 'text'], default: 'mcq' },
+  suggestedAnswer: { type: String, default: '' },
   language: { type: String, default: 'English' } // Language tag from NVIDIA NIM extraction
 });
 

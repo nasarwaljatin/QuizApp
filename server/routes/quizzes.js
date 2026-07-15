@@ -190,7 +190,8 @@ router.get('/:id', verifyStudent, async (req, res) => {
       allowMultipleCorrect: q.allowMultipleCorrect || false,
       isBonusQuestion: q.isBonusQuestion || false,
       marksWeight: q.marksWeight !== undefined ? q.marksWeight : 1,
-      isOptional: q.isOptional || false
+      isOptional: q.isOptional || false,
+      questionType: q.questionType || 'mcq'
     }));
 
     const safeQuiz = {
@@ -381,6 +382,8 @@ router.get('/admin/:id/for-answer-key', verifyAdmin, async (req, res) => {
         isBonusQuestion: q.isBonusQuestion || false,
         marksWeight: q.marksWeight !== undefined ? q.marksWeight : 1,
         isOptional: q.isOptional || false,
+        questionType: q.questionType || 'mcq',
+        suggestedAnswer: q.suggestedAnswer || '',
         language: q.language || 'English'
       })),
       totalQuestionsCount: quiz.questions.length,
@@ -410,6 +413,7 @@ router.post('/:id/set-answer-key', verifyAdmin, async (req, res) => {
         if (q) {
           if (updQ.questionText) q.questionText = updQ.questionText.trim();
           if (updQ.options) q.options = updQ.options.map(o => o.trim());
+          if (updQ.questionType) q.questionType = updQ.questionType;
         }
       });
     }

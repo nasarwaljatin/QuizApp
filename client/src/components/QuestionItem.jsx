@@ -25,10 +25,11 @@ export const QuestionBadges = ({ q }) => {
  */
 export default function QuestionItem({ question, index, selected, onSelect }) {
   const isMulti = question.allowMultipleCorrect === true;
+  const isDirectInput = question.questionType === 'integer' || question.questionType === 'text';
 
   // Parse selected answer list
   let selectedList = [];
-  if (selected) {
+  if (selected && !isDirectInput) {
     if (typeof selected === 'string') {
       try {
         selectedList = JSON.parse(selected);
@@ -52,7 +53,9 @@ export default function QuestionItem({ question, index, selected, onSelect }) {
     }
   };
 
-  const hasSelections = isMulti ? selectedList.length > 0 : !!selected;
+  const hasSelections = isDirectInput
+    ? (selected !== undefined && selected !== null && String(selected).trim() !== '')
+    : (isMulti ? selectedList.length > 0 : !!selected);
 
   return (
     <div className="card animate-slide-up">
@@ -79,44 +82,56 @@ export default function QuestionItem({ question, index, selected, onSelect }) {
         </div>
       )}
 
-      <div className="space-y-3 pl-11">
-        {question.options.map((option, i) => {
-          const isSelected = isMulti ? selectedList.includes(option) : selected === option;
-          return (
-            <label
-              key={i}
-              className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all duration-200 border ${
-                isSelected
-                  ? 'bg-primary-500/20 border-primary-500/60 text-primary-300'
-                  : 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-800 hover:border-slate-600'
-              }`}
-            >
-              <div className={`w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 transition-all duration-200 ${
-                isMulti ? 'rounded-md' : 'rounded-full'
-              } ${
-                isSelected ? 'border-primary-400 bg-primary-400' : 'border-slate-600'
-              }`}>
-                {isSelected && (
-                  isMulti ? (
-                    <div className="w-1.5 h-1.5 bg-white rounded-sm" />
-                  ) : (
-                    <div className="w-2 h-2 rounded-full bg-white" />
-                  )
-                )}
-              </div>
-              <input
-                type={isMulti ? 'checkbox' : 'radio'}
-                name={`question-${question._id}`}
-                value={option}
-                checked={isSelected}
-                onChange={() => handleOptionClick(option)}
-                className="sr-only"
-              />
-              <span className="text-sm">{option}</span>
-            </label>
-          );
-        })}
-      </div>
+      {isDirectInput ? (
+        <div className="pl-11 pr-4 space-y-2">
+          <input
+            type={question.questionType === 'integer' ? 'number' : 'text'}
+            className="input text-sm w-full max-w-md"
+            placeholder={question.questionType === 'integer' ? 'Enter numerical value...' : 'Enter your answer...'}
+            value={selected || ''}
+            onChange={e => onSelect(e.target.value)}
+          />
+        </div>
+      ) : (
+        <div className="space-y-3 pl-11">
+          {question.options.map((option, i) => {
+            const isSelected = isMulti ? selectedList.includes(option) : selected === option;
+            return (
+              <label
+                key={i}
+                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all duration-200 border ${
+                  isSelected
+                    ? 'bg-primary-500/20 border-primary-500/60 text-primary-300'
+                    : 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-800 hover:border-slate-600'
+                }`}
+              >
+                <div className={`w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 transition-all duration-200 ${
+                  isMulti ? 'rounded-md' : 'rounded-full'
+                } ${
+                  isSelected ? 'border-primary-400 bg-primary-400' : 'border-slate-600'
+                }`}>
+                  {isSelected && (
+                    isMulti ? (
+                      <div className="w-1.5 h-1.5 bg-white rounded-sm" />
+                    ) : (
+                      <div className="w-2 h-2 rounded-full bg-white" />
+                    )
+                  )}
+                </div>
+                <input
+                  type={isMulti ? 'checkbox' : 'radio'}
+                  name={`question-${question._id}`}
+                  value={option}
+                  checked={isSelected}
+                  onChange={() => handleOptionClick(option)}
+                  className="sr-only"
+                />
+                <span className="text-sm">{option}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
 
       {hasSelections && (
         <div className="mt-4 pl-11 flex justify-start">

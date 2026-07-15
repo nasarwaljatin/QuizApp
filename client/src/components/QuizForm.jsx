@@ -13,7 +13,9 @@ const emptyQuestion = () => ({
   marksWeight: 1,
   isOptional: false,
   explanationText: '',
-  imageUrl: ''
+  imageUrl: '',
+  questionType: 'mcq',
+  suggestedAnswer: ''
 });
 
 export default function QuizForm({ initialData, onSubmit, loading }) {
@@ -45,7 +47,9 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
           marksWeight: q.marksWeight !== undefined ? q.marksWeight : 1,
           isOptional: q.isOptional || false,
           explanationText: q.explanationText || '',
-          imageUrl: q.imageUrl || ''
+          imageUrl: q.imageUrl || '',
+          questionType: q.questionType || 'mcq',
+          suggestedAnswer: q.suggestedAnswer || ''
         }))
       : [emptyQuestion()]
   );
@@ -421,6 +425,47 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
                   />
                 </div>
 
+                {/* Question Type and Suggestion Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="label text-xs font-medium">Question Type *</label>
+                    <select
+                      className="input text-xs py-1.5"
+                      value={q.questionType || 'mcq'}
+                      onChange={e => {
+                        const newType = e.target.value;
+                        updateQuestion(qIndex, 'questionType', newType);
+                        if (newType !== 'mcq') {
+                          updateQuestion(qIndex, 'options', []);
+                          updateQuestion(qIndex, 'allowMultipleCorrect', false);
+                          updateQuestion(qIndex, 'partialCreditForMultiCorrect', false);
+                        } else {
+                          if (!q.options || q.options.length < 2) {
+                            updateQuestion(qIndex, 'options', ['', '', '', '']);
+                          }
+                        }
+                      }}
+                    >
+                      <option value="mcq">Multiple Choice (MCQ)</option>
+                      <option value="integer">Integer Type (Numeric)</option>
+                      <option value="text">Short Answer (Text)</option>
+                    </select>
+                  </div>
+                  
+                  {q.questionType !== 'mcq' && (
+                    <div>
+                      <label className="label text-xs font-medium">AI Suggested Answer (Optional Hint)</label>
+                      <input
+                        type="text"
+                        className="input text-xs py-1.5"
+                        placeholder="e.g. 42 or photosynthesis"
+                        value={q.suggestedAnswer || ''}
+                        onChange={e => updateQuestion(qIndex, 'suggestedAnswer', e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 {/* Image Section */}
                 <div>
                   <label className="label text-xs">Question Image (diagram, figure, etc. - optional)</label>
@@ -455,52 +500,55 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
                   )}
                 </div>
 
-                <div>
-                  <label className="label">Options (select correct answer{q.allowMultipleCorrect ? 's' : ''}) *</label>
-                  <div className="space-y-2">
-                    {q.options.map((opt, optIndex) => {
-                      const isChecked = q.allowMultipleCorrect
-                        ? (q.correctAnswers || []).includes(opt) && opt !== ''
-                        : q.correctAnswer === opt && opt !== '';
-                      return (
-                        <div key={optIndex} className="flex items-center gap-3">
-                          <input
-                            type={q.allowMultipleCorrect ? 'checkbox' : 'radio'}
-                            name={`correct-${qIndex}`}
-                            checked={isChecked}
-                            onChange={() => {
-                              if (q.allowMultipleCorrect) {
-                                const currentCorrects = q.correctAnswers || [];
-                                const newCorrects = currentCorrects.includes(opt)
-                                  ? currentCorrects.filter(o => o !== opt)
-                                  : [...currentCorrects, opt];
-                                updateQuestion(qIndex, 'correctAnswers', newCorrects);
-                                updateQuestion(qIndex, 'correctAnswer', newCorrects[0] || '');
-                              } else {
-                                updateQuestion(qIndex, 'correctAnswer', opt);
-                                updateQuestion(qIndex, 'correctAnswers', [opt]);
-                              }
-                            }}
-                            className={`w-4 h-4 text-primary-500 accent-primary-500 flex-shrink-0 ${q.allowMultipleCorrect ? 'rounded' : 'rounded-full'}`}
-                            title="Mark as correct answer"
-                          />
-                          <input
-                            className={`input flex-1 ${isChecked ? 'border-primary-500/50 bg-primary-500/10' : ''}`}
-                            value={opt}
-                            onChange={e => updateOption(qIndex, optIndex, e.target.value)}
-                            placeholder={`Option ${optIndex + 1}`}
-                            required
-                          />
-                        </div>
-                      );
-                    })}
+                {/* Options Section (MCQ only) */}
+                {(q.questionType === 'mcq' || !q.questionType) && (
+                  <div>
+                    <label className="label">Options (select correct answer{q.allowMultipleCorrect ? 's' : ''}) *</label>
+                    <div className="space-y-2">
+                      {q.options.map((opt, optIndex) => {
+                        const isChecked = q.allowMultipleCorrect
+                          ? (q.correctAnswers || []).includes(opt) && opt !== ''
+                          : q.correctAnswer === opt && opt !== '';
+                        return (
+                          <div key={optIndex} className="flex items-center gap-3">
+                            <input
+                              type={q.allowMultipleCorrect ? 'checkbox' : 'radio'}
+                              name={`correct-${qIndex}`}
+                              checked={isChecked}
+                              onChange={() => {
+                                if (q.allowMultipleCorrect) {
+                                  const currentCorrects = q.correctAnswers || [];
+                                  const newCorrects = currentCorrects.includes(opt)
+                                    ? currentCorrects.filter(o => o !== opt)
+                                    : [...currentCorrects, opt];
+                                  updateQuestion(qIndex, 'correctAnswers', newCorrects);
+                                  updateQuestion(qIndex, 'correctAnswer', newCorrects[0] || '');
+                                } else {
+                                  updateQuestion(qIndex, 'correctAnswer', opt);
+                                  updateQuestion(qIndex, 'correctAnswers', [opt]);
+                                }
+                              }}
+                              className={`w-4 h-4 text-primary-500 accent-primary-500 flex-shrink-0 ${q.allowMultipleCorrect ? 'rounded' : 'rounded-full'}`}
+                              title="Mark as correct answer"
+                            />
+                            <input
+                              className={`input flex-1 ${isChecked ? 'border-primary-500/50 bg-primary-500/10' : ''}`}
+                              value={opt}
+                              onChange={e => updateOption(qIndex, optIndex, e.target.value)}
+                              placeholder={`Option ${optIndex + 1}`}
+                              required
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {q.allowMultipleCorrect 
+                        ? 'Select all options that are correct (checkboxes).'
+                        : 'Click the radio button on the left to mark the correct answer.'}
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {q.allowMultipleCorrect 
-                      ? 'Select all options that are correct (checkboxes).'
-                      : 'Click the radio button on the left to mark the correct answer.'}
-                  </p>
-                </div>
+                )}
 
                 {/* Per-Question Settings Toggle Panel */}
                 <div className="border-t border-slate-800/60 pt-4 mt-4 space-y-4">
