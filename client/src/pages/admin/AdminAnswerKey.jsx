@@ -4,6 +4,26 @@ import { ArrowLeft, ShieldCheck, Check, Edit3, Save, X, ChevronDown, ChevronUp, 
 import api from '../../api/axios';
 import ThemeToggle from '../../components/ThemeToggle';
 
+const QuestionBadges = ({ q }) => {
+  const badges = [];
+  if (q.isBonusQuestion) badges.push({ text: 'Bonus', bg: 'bg-purple-500/20 text-purple-400 border-purple-500/30' });
+  if (q.isOptional) badges.push({ text: 'Optional', bg: 'bg-blue-500/20 text-blue-400 border-blue-500/30' });
+  if (q.allowMultipleCorrect) badges.push({ text: 'Multi-Correct', bg: 'bg-teal-500/20 text-teal-400 border-teal-500/30' });
+  if (q.marksWeight !== undefined && q.marksWeight !== 1) badges.push({ text: `${q.marksWeight} Mark${q.marksWeight > 1 ? 's' : ''}`, bg: 'bg-amber-500/20 text-amber-400 border-amber-500/30' });
+  
+  if (badges.length === 0) return null;
+  
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {badges.map((b, i) => (
+        <span key={i} className={`text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 rounded-full border ${b.bg}`}>
+          {b.text}
+        </span>
+      ))}
+    </div>
+  );
+};
+
 export default function AdminAnswerKey() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -53,7 +73,14 @@ export default function AdminAnswerKey() {
     ? questions.map((q, i) => ({ ...q, originalIndex: i }))
     : questions.map((q, i) => ({ ...q, originalIndex: i })).filter(q => (q.language || 'English') === activeLanguage);
 
-  const answeredCount = Object.keys(answers).length;
+  const answeredCount = questions.filter((q, i) => {
+    const ans = answers[i];
+    if (q.isBonusQuestion) return true;
+    if (q.allowMultipleCorrect) {
+      return Array.isArray(ans) && ans.length > 0;
+    }
+    return ans !== undefined && ans !== null && ans !== '';
+  }).length;
   const unansweredCount = questions.length - answeredCount;
 
   const startEdit = useCallback((origIdx) => {
@@ -88,10 +115,24 @@ export default function AdminAnswerKey() {
 
     setSaving(true); setError('');
     try {
-      const answersPayload = questions.map((q, i) => ({
-        questionId: q._id,
-        correctAnswer: answers[i] || ''
-      }));
+      const answersPayload = questions.map((q, i) => {
+        const currentAns = answers[i];
+        if (q.allowMultipleCorrect) {
+          const arr = Array.isArray(currentAns) ? currentAns : (currentAns ? [currentAns] : []);
+          return {
+            questionId: q._id,
+            correctAnswers: arr,
+            correctAnswer: arr.length > 0 ? arr[0] : ''
+          };
+        } else {
+          const val = Array.isArray(currentAns) ? (currentAns[0] || '') : (currentAns || '');
+          return {
+            questionId: q._id,
+            correctAnswer: val,
+            correctAnswers: val ? [val] : []
+          };
+        }
+      });
 
       // Include edited questions
       const updatedQuestions = questions.map((q, i) => ({
@@ -216,7 +257,10 @@ export default function AdminAnswerKey() {
           const isExpanded = expandedIndex === origIdx;
           const isEditing = editingIndex === origIdx;
           const selectedAnswer = answers[origIdx];
-          const hasAnswer = !!selectedAnswer;
+          const isMulti = q.allowMultipleCorrect === true;
+          const hasAnswer = isMulti
+            ? (Array.isArray(selectedAnswer) && selectedAnswer.length > 0)
+            : (selectedAnswer !== undefined && selectedAnswer !== null && selectedAnswer !== '');
           const currentQ = questions[origIdx];
           const qLanguage = currentQ.language || 'English';
 
@@ -237,8 +281,9 @@ export default function AdminAnswerKey() {
 
                 <div className="flex-1 min-w-0">
                   <p className="text-slate-200 text-sm leading-relaxed">{currentQ.questionText}</p>
+                  <QuestionBadges q={currentQ} />
                   {hasAnswer && !isExpanded && (
-                    <p className="text-emerald-400 text-xs mt-1">✓ {selectedAnswer}</p>
+                    <p className="text-emerald-400 text-xs mt-1">✓ {isMulti ? selectedAnswer.join(', ') : selectedAnswer}</p>
                   )}
                   {qLanguage !== 'English' && languages.length > 2 && (
                     <span className="text-xs text-slate-500 flex items-center gap-1 mt-1">
@@ -327,22 +372,44 @@ export default function AdminAnswerKey() {
                     </div>
                   ) : (
                     /* ── Answer Selection Mode ── */
-                    <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                      <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Select the correct answer:</p>
+                     <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                      {currentQ.imageUrl && (
+                        <div className="mb-4 max-w-xs rounded-xl overflow-hidden border border-slate-700 bg-slate-800/40 p-2">
+                          <img src={currentQ.imageUrl} alt="Question diagram" className="max-h-48 object-contain rounded-lg" />
+                        </div>
+                      )}
+                      <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+                        {currentQ.allowMultipleCorrect ? 'Select all correct answers (checkboxes):' : 'Select the correct answer:'}
+                      </p>
                       {currentQ.options.map((option, oi) => {
-                        const isSelected = selectedAnswer === option;
+                        const isSelected = currentQ.allowMultipleCorrect
+                          ? (Array.isArray(selectedAnswer) && selectedAnswer.includes(option))
+                          : (selectedAnswer === option);
+                        
+                        const handleOptionClick = () => {
+                          if (currentQ.allowMultipleCorrect) {
+                            const currentSelected = Array.isArray(selectedAnswer) ? selectedAnswer : (selectedAnswer ? [selectedAnswer] : []);
+                            const newSelected = currentSelected.includes(option)
+                              ? currentSelected.filter(o => o !== option)
+                              : [...currentSelected, option];
+                            setAnswers(prev => ({ ...prev, [origIdx]: newSelected }));
+                          } else {
+                            setAnswers(prev => ({ ...prev, [origIdx]: option }));
+                          }
+                        };
+
                         return (
                           <button
                             key={oi}
                             type="button"
-                            onClick={() => setAnswers(prev => ({ ...prev, [origIdx]: option }))}
+                            onClick={handleOptionClick}
                             className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all duration-200 flex items-center gap-3 ${
                               isSelected
                                 ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
                                 : 'border-slate-700 bg-slate-800/40 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
                             }`}
                           >
-                            <span className={`w-5 h-5 rounded-full border flex-shrink-0 flex items-center justify-center ${isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
+                            <span className={`w-5 h-5 border flex-shrink-0 flex items-center justify-center ${currentQ.allowMultipleCorrect ? 'rounded' : 'rounded-full'} ${isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'}`}>
                               {isSelected && <Check className="w-3 h-3 text-white" />}
                             </span>
                             {option}

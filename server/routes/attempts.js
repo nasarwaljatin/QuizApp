@@ -28,31 +28,136 @@ router.post('/', verifyStudent, async (req, res) => {
     const quiz = await Quiz.findById(quizId);
     if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
 
-    // Build detailed answers by cross-referencing the quiz's correctAnswer
+    let totalMarks = 0;
+    let negativeMarksDeducted = 0;
+    const penaltyRate = quiz.negativeMarking ? (quiz.negativeMarkingPoints || 0) : 0;
+
+    // Build detailed answers by cross-referencing the quiz's questions schema
     const detailedAnswers = answers.map(({ questionText, selectedAnswer }) => {
-      const question = quiz.questions.find(q => q.questionText === questionText);
-      const correctAnswer = question ? question.correctAnswer : '';
-      const isCorrect = selectedAnswer === correctAnswer;
-      return { questionText, selectedAnswer, correctAnswer, isCorrect };
+      const q = quiz.questions.find(item => item.questionText === questionText);
+      if (!q) {
+        return {
+          questionText,
+          selectedAnswer,
+          correctAnswer: '',
+          isCorrect: false,
+          pointsAwarded: 0
+        };
+      }
+
+      const weight = q.marksWeight !== undefined ? q.marksWeight : 1;
+      totalMarks += weight;
+
+      // 1. Bonus Question
+      if (q.isBonusQuestion) {
+        return {
+          questionText,
+          selectedAnswer,
+          correctAnswer: q.allowMultipleCorrect ? JSON.stringify(q.correctAnswers) : q.correctAnswer,
+          isCorrect: true,
+          isBonus: true,
+          pointsAwarded: weight
+        };
+      }
+
+      // Parse selection (selectedAnswer can be a JSON string representing an array, or a simple string)
+      let parsedSelected = [];
+      if (q.allowMultipleCorrect) {
+        try {
+          parsedSelected = JSON.parse(selectedAnswer);
+          if (!Array.isArray(parsedSelected)) parsedSelected = selectedAnswer ? [selectedAnswer] : [];
+        } catch (e) {
+          parsedSelected = selectedAnswer ? [selectedAnswer] : [];
+        }
+      } else {
+        parsedSelected = selectedAnswer ? [selectedAnswer] : [];
+      }
+
+      // Filter empty answers
+      parsedSelected = parsedSelected.filter(s => s && s.trim());
+
+      const correctList = q.allowMultipleCorrect
+        ? (q.correctAnswers || [])
+        : (q.correctAnswer ? [q.correctAnswer] : []);
+
+      // If nothing selected, it is skipped (no points, no penalty)
+      if (parsedSelected.length === 0) {
+        return {
+          questionText,
+          selectedAnswer,
+          correctAnswer: q.allowMultipleCorrect ? JSON.stringify(correctList) : q.correctAnswer,
+          isCorrect: false,
+          pointsAwarded: 0,
+          isSkipped: true
+        };
+      }
+
+      // Check correctness
+      let isCorrect = false;
+      let pointsAwarded = 0;
+      let isIncorrect = false;
+
+      if (q.allowMultipleCorrect) {
+        // Find if they selected any incorrect option
+        const wrongSelections = parsedSelected.filter(s => !correctList.includes(s));
+        if (wrongSelections.length > 0) {
+          isIncorrect = true;
+          isCorrect = false;
+          pointsAwarded = 0;
+        } else {
+          // All selections are correct options. (S subset of C)
+          if (parsedSelected.length === correctList.length) {
+            isCorrect = true;
+            pointsAwarded = weight;
+          } else {
+            // Partial correct
+            isCorrect = false;
+            if (q.partialCreditForMultiCorrect && correctList.length > 0) {
+              pointsAwarded = parseFloat(((parsedSelected.length / correctList.length) * weight).toFixed(4));
+            } else {
+              pointsAwarded = 0;
+            }
+          }
+        }
+      } else {
+        // Single-correct logic
+        if (selectedAnswer === q.correctAnswer) {
+          isCorrect = true;
+          pointsAwarded = weight;
+        } else {
+          isIncorrect = true;
+          isCorrect = false;
+          pointsAwarded = 0;
+        }
+      }
+
+      // Deduct negative marks if incorrect
+      if (isIncorrect && penaltyRate > 0) {
+        const penalty = parseFloat((weight * penaltyRate).toFixed(4));
+        negativeMarksDeducted += penalty;
+      }
+
+      return {
+        questionText,
+        selectedAnswer,
+        correctAnswer: q.allowMultipleCorrect ? JSON.stringify(correctList) : q.correctAnswer,
+        isCorrect,
+        pointsAwarded
+      };
     });
 
-    const correctCount = detailedAnswers.filter(a => a.isCorrect).length;
-    // Wrong = answered incorrectly (blank/unanswered answers are NOT penalised)
-    const wrongCount = detailedAnswers.filter(a => !a.isCorrect && a.selectedAnswer !== '').length;
-
-    const penalty = quiz.negativeMarking ? (quiz.negativeMarkingPoints || 0) : 0;
-    const negativeMarksDeducted = parseFloat((wrongCount * penalty).toFixed(4));
-    const rawScore = correctCount - negativeMarksDeducted;
-    const score = Math.max(0, parseFloat(rawScore.toFixed(4))); // never below 0
+    const earnedPoints = detailedAnswers.reduce((sum, a) => sum + (a.pointsAwarded || 0), 0);
+    const rawScore = earnedPoints - negativeMarksDeducted;
+    const score = Math.max(0, parseFloat(rawScore.toFixed(4)));
 
     const attempt = new Attempt({
       studentId: req.user.id,
       quizId,
       answers: detailedAnswers,
       score,
-      negativeMarksDeducted,
+      negativeMarksDeducted: parseFloat(negativeMarksDeducted.toFixed(4)),
       totalQuestions: answers.length,
-      totalMarks: answers.length,
+      totalMarks: totalMarks || answers.length,
       timeTakenSeconds,
       autoSubmitted: autoSubmitted || false
     });
@@ -181,23 +286,31 @@ router.get('/my/analytics', verifyStudent, async (req, res) => {
 router.get('/my/:attemptId', verifyStudent, async (req, res) => {
   try {
     const attempt = await Attempt.findOne({ _id: req.params.attemptId, studentId: req.user.id })
-      .populate('quizId', 'title durationMinutes showCorrectAnswersAfterSubmit');
+      .populate('quizId', 'title durationMinutes showCorrectAnswersAfterSubmit questions');
     if (!attempt) return res.status(404).json({ message: 'Attempt not found.' });
     
     const attemptObj = formatAttemptResponse(attempt);
-    
     const showAnswers = attempt.quizId ? attempt.quizId.showCorrectAnswersAfterSubmit : true;
-    if (showAnswers === false) {
-      attemptObj.answers = attemptObj.answers.map(ans => ({
+    const originalQuestions = (attempt.quizId && attempt.quizId.questions) ? attempt.quizId.questions : [];
+
+    attemptObj.answers = attemptObj.answers.map(ans => {
+      const q = originalQuestions.find(item => item.questionText === ans.questionText);
+      const enriched = {
         questionText: ans.questionText,
         selectedAnswer: ans.selectedAnswer,
-        correctAnswer: '',
-        isCorrect: false
-      }));
-      attemptObj.showCorrectAnswersAfterSubmit = false;
-    } else {
-      attemptObj.showCorrectAnswersAfterSubmit = true;
-    }
+        correctAnswer: showAnswers === false ? '' : ans.correctAnswer,
+        isCorrect: ans.isCorrect,
+        imageUrl: q ? q.imageUrl : '',
+        explanationText: (showAnswers === false || !q) ? '' : q.explanationText,
+        allowMultipleCorrect: q ? q.allowMultipleCorrect : false,
+        isBonusQuestion: q ? q.isBonusQuestion : false,
+        marksWeight: q && q.marksWeight !== undefined ? q.marksWeight : 1,
+        isOptional: q ? q.isOptional : false
+      };
+      return enriched;
+    });
+
+    attemptObj.showCorrectAnswersAfterSubmit = !!showAnswers;
 
     res.json(attemptObj);
   } catch (err) {

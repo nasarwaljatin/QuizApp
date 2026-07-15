@@ -185,7 +185,12 @@ router.get('/:id', verifyStudent, async (req, res) => {
     const safeQuestions = questionsToDeliver.map(q => ({
       _id: q._id,
       questionText: q.questionText,
-      options: shouldShuffleOptions ? shuffleArray(q.options) : q.options
+      options: shouldShuffleOptions ? shuffleArray(q.options) : q.options,
+      imageUrl: q.imageUrl || '',
+      allowMultipleCorrect: q.allowMultipleCorrect || false,
+      isBonusQuestion: q.isBonusQuestion || false,
+      marksWeight: q.marksWeight !== undefined ? q.marksWeight : 1,
+      isOptional: q.isOptional || false
     }));
 
     const safeQuiz = {
@@ -200,6 +205,47 @@ router.get('/:id', verifyStudent, async (req, res) => {
 });
 
 // ─── ADMIN ROUTES ─────────────────────────────────────────────────────────────
+
+const multer = require('multer');
+const cloudinary = require('../config/cloudinary');
+
+// Multer memory storage for image uploads (max 5MB, JPG/PNG/WEBP only)
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPG, PNG, and WEBP images are allowed.'));
+    }
+  }
+}).single('image');
+
+// POST /api/quizzes/admin/upload-image — upload an image to Cloudinary (admin only)
+router.post('/admin/upload-image', verifyAdmin, (req, res) => {
+  imageUpload(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file provided.' });
+    }
+
+    // Stream the file buffer directly to Cloudinary
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: 'quiz_images' },
+      (error, result) => {
+        if (error) {
+          return res.status(500).json({ message: 'Cloudinary upload failed.', error: error.message });
+        }
+        res.status(200).json({ imageUrl: result.secure_url });
+      }
+    );
+    stream.end(req.file.buffer);
+  });
+});
 
 // GET /api/quizzes/admin/all — all quizzes including drafts
 router.get('/admin/all', verifyAdmin, async (req, res) => {
@@ -322,14 +368,20 @@ router.get('/admin/:id/for-answer-key', verifyAdmin, async (req, res) => {
       questionsToReturn = quiz.questions.filter(q => !q.correctAnswer || q.correctAnswer.trim() === '');
     }
 
-    // Strip correctAnswer — admin will be setting them fresh
+    // Strip correctAnswer/correctAnswers/explanationText — admin will be setting them fresh
     const safeQuiz = {
       ...quiz,
-      questions: questionsToReturn.map(({ questionText, options, language, _id }) => ({
-        _id,
-        questionText,
-        options,
-        language: language || 'English'
+      questions: questionsToReturn.map(q => ({
+        _id: q._id,
+        questionText: q.questionText,
+        options: q.options,
+        imageUrl: q.imageUrl || '',
+        allowMultipleCorrect: q.allowMultipleCorrect || false,
+        partialCreditForMultiCorrect: q.partialCreditForMultiCorrect || false,
+        isBonusQuestion: q.isBonusQuestion || false,
+        marksWeight: q.marksWeight !== undefined ? q.marksWeight : 1,
+        isOptional: q.isOptional || false,
+        language: q.language || 'English'
       })),
       totalQuestionsCount: quiz.questions.length,
       answeredQuestionsCount: answeredCount
@@ -367,10 +419,16 @@ router.post('/:id/set-answer-key', verifyAdmin, async (req, res) => {
       return res.status(400).json({ message: 'answers array is required.' });
     }
 
-    answers.forEach(({ questionId, correctAnswer }) => {
+    answers.forEach(({ questionId, correctAnswer, correctAnswers }) => {
       const q = quiz.questions.id(questionId);
-      if (q && correctAnswer) {
-        q.correctAnswer = correctAnswer;
+      if (q) {
+        if (correctAnswers && Array.isArray(correctAnswers)) {
+          q.correctAnswers = correctAnswers;
+          q.correctAnswer = correctAnswers.length > 0 ? correctAnswers[0] : '';
+        } else if (correctAnswer) {
+          q.correctAnswer = correctAnswer;
+          q.correctAnswers = [correctAnswer];
+        }
       }
     });
 
@@ -389,8 +447,12 @@ router.post('/:id/publish', verifyAdmin, async (req, res) => {
     const quiz = await Quiz.findById(req.params.id);
     if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
 
-    // Verify all questions have a correct answer set
-    const unanswered = quiz.questions.filter(q => !q.correctAnswer || !q.correctAnswer.trim());
+    // Verify all non-bonus questions have a correct answer set
+    const unanswered = quiz.questions.filter(q => 
+      !q.isBonusQuestion && 
+      (!q.correctAnswer || !q.correctAnswer.trim()) && 
+      (!q.correctAnswers || q.correctAnswers.length === 0)
+    );
     if (unanswered.length > 0) {
       return res.status(400).json({
         message: `${unanswered.length} question(s) still have no correct answer set. Please complete the answer key before publishing.`

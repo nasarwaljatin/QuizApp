@@ -3,7 +3,15 @@ const mongoose = require('mongoose');
 const questionSchema = new mongoose.Schema({
   questionText: { type: String, required: true },
   options: [{ type: String, required: true }],
-  correctAnswer: { type: String, required: false, default: '' }, // Optional for AI-generated drafts
+  correctAnswer: { type: String, required: false, default: '' }, // Backwards compatibility for single correct
+  correctAnswers: [{ type: String, default: [] }], // For multi-correct or clean array access
+  imageUrl: { type: String, default: '' },
+  allowMultipleCorrect: { type: Boolean, default: false },
+  partialCreditForMultiCorrect: { type: Boolean, default: false },
+  isBonusQuestion: { type: Boolean, default: false },
+  marksWeight: { type: Number, default: 1 },
+  isOptional: { type: Boolean, default: false },
+  explanationText: { type: String, default: '' },
   language: { type: String, default: 'English' } // Language tag from NVIDIA NIM extraction
 });
 

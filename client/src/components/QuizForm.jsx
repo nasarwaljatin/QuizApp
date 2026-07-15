@@ -5,7 +5,15 @@ import api from '../api/axios';
 const emptyQuestion = () => ({
   questionText: '',
   options: ['', '', '', ''],
-  correctAnswer: ''
+  correctAnswer: '',
+  correctAnswers: [],
+  allowMultipleCorrect: false,
+  partialCreditForMultiCorrect: false,
+  isBonusQuestion: false,
+  marksWeight: 1,
+  isOptional: false,
+  explanationText: '',
+  imageUrl: ''
 });
 
 export default function QuizForm({ initialData, onSubmit, loading }) {
@@ -28,9 +36,20 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
 
   const [questions, setQuestions] = useState(
     initialData?.questions?.length > 0
-      ? initialData.questions
+      ? initialData.questions.map(q => ({
+          ...q,
+          correctAnswers: q.correctAnswers?.length > 0 ? q.correctAnswers : (q.correctAnswer ? [q.correctAnswer] : []),
+          allowMultipleCorrect: q.allowMultipleCorrect || false,
+          partialCreditForMultiCorrect: q.partialCreditForMultiCorrect || false,
+          isBonusQuestion: q.isBonusQuestion || false,
+          marksWeight: q.marksWeight !== undefined ? q.marksWeight : 1,
+          isOptional: q.isOptional || false,
+          explanationText: q.explanationText || '',
+          imageUrl: q.imageUrl || ''
+        }))
       : [emptyQuestion()]
   );
+  const [uploadingImageIndex, setUploadingImageIndex] = useState(null);
   const [expanded, setExpanded] = useState([0]);
 
   // Folder states
@@ -117,6 +136,23 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
     });
   };
 
+  const handleImageUpload = async (qIndex, file) => {
+    if (!file) return;
+    setUploadingImageIndex(qIndex);
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const res = await api.post('/quizzes/admin/upload-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      updateQuestion(qIndex, 'imageUrl', res.data.imageUrl);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to upload image.');
+    } finally {
+      setUploadingImageIndex(null);
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     // Validation
@@ -128,8 +164,16 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
       if (q.options.some(o => !o.trim())) {
         alert(`Question ${i + 1} has empty options.`); return;
       }
-      if (!q.correctAnswer) {
-        alert(`Question ${i + 1} has no correct answer selected.`); return;
+      if (!q.isBonusQuestion) {
+        if (q.allowMultipleCorrect) {
+          if (!q.correctAnswers || q.correctAnswers.length === 0) {
+            alert(`Question ${i + 1} (Multiple Correct) must have at least one correct answer selected.`); return;
+          }
+        } else {
+          if (!q.correctAnswer) {
+            alert(`Question ${i + 1} has no correct answer selected.`); return;
+          }
+        }
       }
     }
 
@@ -377,31 +421,170 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
                   />
                 </div>
 
+                {/* Image Section */}
                 <div>
-                  <label className="label">Options (select the correct answer) *</label>
-                  <div className="space-y-2">
-                    {q.options.map((opt, optIndex) => (
-                      <div key={optIndex} className="flex items-center gap-3">
+                  <label className="label text-xs">Question Image (diagram, figure, etc. - optional)</label>
+                  {q.imageUrl && (
+                    <div className="relative mt-2 max-w-xs rounded-xl overflow-hidden border border-slate-700 bg-slate-800/40 p-2 animate-fade-in">
+                      <img src={q.imageUrl} alt="Question diagram" className="max-h-48 object-contain rounded-lg" />
+                      <button
+                        type="button"
+                        onClick={() => updateQuestion(qIndex, 'imageUrl', '')}
+                        className="absolute top-4 right-4 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow transition-colors"
+                        title="Remove image"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {!q.imageUrl && (
+                    <div className="mt-2 flex items-center gap-3">
+                      <label className="inline-flex items-center gap-2 cursor-pointer btn-secondary py-1.5 px-3 text-xs">
+                        <span>Add Image</span>
                         <input
-                          type="radio"
-                          name={`correct-${qIndex}`}
-                          checked={q.correctAnswer === opt && opt !== ''}
-                          onChange={() => updateQuestion(qIndex, 'correctAnswer', opt)}
-                          className="w-4 h-4 text-primary-500 accent-primary-500 flex-shrink-0"
-                          title="Mark as correct answer"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={e => handleImageUpload(qIndex, e.target.files[0])}
+                          className="sr-only"
                         />
+                      </label>
+                      {uploadingImageIndex === qIndex && (
+                        <span className="text-xs text-slate-500 animate-pulse">Uploading image...</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="label">Options (select correct answer{q.allowMultipleCorrect ? 's' : ''}) *</label>
+                  <div className="space-y-2">
+                    {q.options.map((opt, optIndex) => {
+                      const isChecked = q.allowMultipleCorrect
+                        ? (q.correctAnswers || []).includes(opt) && opt !== ''
+                        : q.correctAnswer === opt && opt !== '';
+                      return (
+                        <div key={optIndex} className="flex items-center gap-3">
+                          <input
+                            type={q.allowMultipleCorrect ? 'checkbox' : 'radio'}
+                            name={`correct-${qIndex}`}
+                            checked={isChecked}
+                            onChange={() => {
+                              if (q.allowMultipleCorrect) {
+                                const currentCorrects = q.correctAnswers || [];
+                                const newCorrects = currentCorrects.includes(opt)
+                                  ? currentCorrects.filter(o => o !== opt)
+                                  : [...currentCorrects, opt];
+                                updateQuestion(qIndex, 'correctAnswers', newCorrects);
+                                updateQuestion(qIndex, 'correctAnswer', newCorrects[0] || '');
+                              } else {
+                                updateQuestion(qIndex, 'correctAnswer', opt);
+                                updateQuestion(qIndex, 'correctAnswers', [opt]);
+                              }
+                            }}
+                            className={`w-4 h-4 text-primary-500 accent-primary-500 flex-shrink-0 ${q.allowMultipleCorrect ? 'rounded' : 'rounded-full'}`}
+                            title="Mark as correct answer"
+                          />
+                          <input
+                            className={`input flex-1 ${isChecked ? 'border-primary-500/50 bg-primary-500/10' : ''}`}
+                            value={opt}
+                            onChange={e => updateOption(qIndex, optIndex, e.target.value)}
+                            placeholder={`Option ${optIndex + 1}`}
+                            required
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {q.allowMultipleCorrect 
+                      ? 'Select all options that are correct (checkboxes).'
+                      : 'Click the radio button on the left to mark the correct answer.'}
+                  </p>
+                </div>
+
+                {/* Per-Question Settings Toggle Panel */}
+                <div className="border-t border-slate-800/60 pt-4 mt-4 space-y-4">
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Question Settings</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* Toggles */}
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
                         <input
-                          className={`input flex-1 ${q.correctAnswer === opt && opt !== '' ? 'border-primary-500/50 bg-primary-500/10' : ''}`}
-                          value={opt}
-                          onChange={e => updateOption(qIndex, optIndex, e.target.value)}
-                          placeholder={`Option ${optIndex + 1}`}
-                          required
+                          type="checkbox"
+                          checked={q.allowMultipleCorrect || false}
+                          onChange={e => {
+                            updateQuestion(qIndex, 'allowMultipleCorrect', e.target.checked);
+                            updateQuestion(qIndex, 'correctAnswers', []);
+                            updateQuestion(qIndex, 'correctAnswer', '');
+                          }}
+                          className="w-4 h-4 accent-primary-500 rounded bg-slate-800 border-slate-700"
+                        />
+                        <span>Multiple Correct Answers</span>
+                      </label>
+                      
+                      {q.allowMultipleCorrect && (
+                        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pl-6 animate-fade-in">
+                          <input
+                            type="checkbox"
+                            checked={q.partialCreditForMultiCorrect || false}
+                            onChange={e => updateQuestion(qIndex, 'partialCreditForMultiCorrect', e.target.checked)}
+                            className="w-4 h-4 accent-primary-500 rounded bg-slate-800 border-slate-700"
+                          />
+                          <span>Allow Partial Credit</span>
+                        </label>
+                      )}
+
+                      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={q.isBonusQuestion || false}
+                          onChange={e => updateQuestion(qIndex, 'isBonusQuestion', e.target.checked)}
+                          className="w-4 h-4 accent-primary-500 rounded bg-slate-800 border-slate-700"
+                        />
+                        <span>Bonus Question</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={q.isOptional || false}
+                          onChange={e => updateQuestion(qIndex, 'isOptional', e.target.checked)}
+                          className="w-4 h-4 accent-primary-500 rounded bg-slate-800 border-slate-700"
+                        />
+                        <span>Optional Question</span>
+                      </label>
+                    </div>
+
+                    {/* Inputs */}
+                    <div className="space-y-3">
+                      <div>
+                        <label className="label text-xs">Question Weight (Marks)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          className="input text-xs py-1.5 max-w-[120px]"
+                          value={q.marksWeight !== undefined ? q.marksWeight : 1}
+                          onChange={e => updateQuestion(qIndex, 'marksWeight', Math.max(1, parseInt(e.target.value) || 1))}
                         />
                       </div>
-                    ))}
+
+                      <div>
+                        <label className="label text-xs">Explanation / Solution Note (optional)</label>
+                        <textarea
+                          className="input text-xs py-1.5 resize-none"
+                          rows={2}
+                          placeholder="Explain why the correct answer is correct..."
+                          value={q.explanationText || ''}
+                          onChange={e => updateQuestion(qIndex, 'explanationText', e.target.value)}
+                        />
+                      </div>
+                    </div>
+
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">Click the radio button on the left to mark correct answer.</p>
                 </div>
+
               </div>
             )}
           </div>

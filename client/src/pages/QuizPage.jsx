@@ -105,6 +105,14 @@ export default function QuizPage() {
     const q = shuffledQuestions[idx];
     if (!q) return false;
     const ans = answers[q.questionText];
+    if (q.allowMultipleCorrect) {
+      try {
+        const parsed = JSON.parse(ans);
+        return Array.isArray(parsed) && parsed.length > 0;
+      } catch (e) {
+        return ans !== undefined && ans !== null && ans !== '' && ans !== '[]';
+      }
+    }
     return ans !== undefined && ans !== null && ans !== '';
   };
 
@@ -114,8 +122,8 @@ export default function QuizPage() {
     return 'unvisited'; // Gray
   };
 
-  const answeredCount = Object.keys(answers).filter(key => answers[key] !== null && answers[key] !== '').length;
-  const unansweredCount = shuffledQuestions.length - answeredCount;
+  const answeredCount = shuffledQuestions.filter((_, idx) => isQuestionAttempted(idx)).length;
+  const unansweredCount = shuffledQuestions.filter((q, idx) => !q.isOptional && !isQuestionAttempted(idx)).length;
   const currentQuestion = shuffledQuestions[currentIndex];
 
   if (loading) {
@@ -249,7 +257,7 @@ export default function QuizPage() {
 
             {/* Grid */}
             <div className="grid grid-cols-5 gap-2">
-              {shuffledQuestions.map((_, idx) => {
+              {shuffledQuestions.map((q, idx) => {
                 const status = getQuestionStatus(idx);
                 const isActive = idx === currentIndex;
                 
@@ -260,6 +268,15 @@ export default function QuizPage() {
                   bgClass = 'bg-red-500/20 text-red-400 border-red-500/40 hover:bg-red-500/30';
                 }
 
+                let indicator = null;
+                if (q.isBonusQuestion) {
+                  indicator = <span className="absolute top-0.5 right-0.5 text-[8px] text-purple-400 font-bold" title="Bonus">★</span>;
+                } else if (q.allowMultipleCorrect) {
+                  indicator = <span className="absolute top-0.5 right-0.5 text-[7px] text-teal-400 font-bold" title="Multi-Correct">M</span>;
+                } else if (q.isOptional) {
+                  indicator = <span className="absolute top-0.5 right-0.5 text-[7px] text-blue-400 font-bold" title="Optional">O</span>;
+                }
+
                 return (
                   <button
                     key={idx}
@@ -267,11 +284,12 @@ export default function QuizPage() {
                       handleNavigate(idx);
                       setPaletteOpen(false); // Auto close mobile dropdown on jump
                     }}
-                    className={`h-9 w-9 rounded-lg font-bold text-sm flex items-center justify-center transition-all border ${bgClass} ${
+                    className={`relative h-9 w-9 rounded-lg font-bold text-sm flex items-center justify-center transition-all border ${bgClass} ${
                       isActive ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-slate-900 scale-105' : ''
                     }`}
                   >
                     {idx + 1}
+                    {indicator}
                   </button>
                 );
               })}
@@ -292,6 +310,18 @@ export default function QuizPage() {
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 rounded bg-slate-800 border border-slate-700 flex-shrink-0" />
                   <span className="text-slate-300">Not Visited ({shuffledQuestions.length - Object.keys(visited).length})</span>
+                </div>
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-800/40">
+                  <span className="w-4 text-center text-[10px] text-purple-400 font-bold">★</span>
+                  <span className="text-slate-300">Bonus Question</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-4 text-center text-[8px] text-teal-400 font-bold">M</span>
+                  <span className="text-slate-300">Multi-Correct</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-4 text-center text-[8px] text-blue-400 font-bold">O</span>
+                  <span className="text-slate-300">Optional Question</span>
                 </div>
               </div>
             </div>
@@ -322,7 +352,7 @@ export default function QuizPage() {
                 <span className="font-semibold text-emerald-400">{answeredCount}</span>
               </div>
               <div className="flex justify-between text-sm text-slate-400">
-                <span>Unanswered:</span>
+                <span>Unanswered (Required):</span>
                 <span className={`font-semibold ${unansweredCount > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
                   {unansweredCount}
                 </span>
@@ -332,7 +362,7 @@ export default function QuizPage() {
             {unansweredCount > 0 && (
               <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 text-amber-400 text-sm mb-4">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                <span>You still have unanswered questions!</span>
+                <span>You still have unanswered required questions!</span>
               </div>
             )}
             
