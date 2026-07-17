@@ -130,19 +130,19 @@ export default function StudentDashboard() {
       <div className="max-w-5xl mx-auto px-4 pt-8 space-y-8">
         {/* Welcome */}
         <div>
-          <h1 className="text-3xl font-extrabold font-display text-slate-100">Welcome back, {user?.name?.split(' ')[0]}!</h1>
+          <h1 className="text-3xl font-bold text-slate-100">Welcome back, {user?.name?.split(' ')[0]}!</h1>
           <p className="text-slate-400 mt-1">Here's an overview of your quiz performance.</p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex bg-slate-800 shadow-nm-inset-sm rounded-2xl p-1">
+        <div className="flex gap-1 bg-slate-800/60 rounded-xl p-1">
           {TABS.map(tab => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab.key
-                  ? 'bg-slate-900 shadow-nm-extruded-sm text-slate-100'
+                  ? 'bg-slate-700 text-slate-100 shadow'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >

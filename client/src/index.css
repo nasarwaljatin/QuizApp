@@ -1,237 +1,112 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=DM+Sans:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Neumorphic base colors - all shades of slate mapped to monochromatic light background #E0E5EC */
-  --color-slate-950: 224 229 236; /* Background */
-  --color-slate-900: 224 229 236; /* Cards */
-  --color-slate-800: 224 229 236; /* Inputs/Buttons */
-  --color-slate-700: 224 229 236; /* Borders */
-  --color-slate-600: 224 229 236;
-  --color-slate-500: 107 114 128;
-  --color-slate-400: 107 114 128; /* Muted text #6B7280 */
-  --color-slate-300: 61 72 82;
-  --color-slate-200: 61 72 82;
-  --color-slate-100: 61 72 82;   /* Primary text #3D4852 */
-  --color-slate-50: 61 72 82;
+  --color-slate-50: 15 23 42;      /* slate-900 */
+  --color-slate-100: 15 23 42;     /* slate-900 */
+  --color-slate-200: 51 65 85;      /* slate-700 */
+  --color-slate-300: 71 85 105;     /* slate-600 */
+  --color-slate-400: 100 116 139;   /* slate-500 */
+  --color-slate-500: 148 163 184;   /* slate-400 */
+  --color-slate-600: 203 213 225;   /* slate-300 */
+  --color-slate-700: 226 232 240;   /* slate-200 */
+  --color-slate-800: 241 245 249;   /* slate-100 */
+  --color-slate-900: 255 255 255;   /* white */
+  --color-slate-950: 248 250 252;   /* slate-50 background */
 
-  /* Shadows base values (Light mode) */
-  --nm-shadow-light-color: 255, 255, 255;
-  --nm-shadow-dark-color: 163, 177, 198;
-  --nm-shadow-light-opacity: 0.55;
-  --nm-shadow-light-opacity-hover: 0.65;
-  --nm-shadow-dark-opacity: 0.65;
-  --nm-shadow-dark-opacity-hover: 0.75;
-
-  /* CSS shadow variables */
-  --nm-extruded: 9px 9px 16px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity)), -9px -9px 16px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity));
-  --nm-extruded-hover: 12px 12px 20px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity-hover)), -12px -12px 20px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity-hover));
-  --nm-extruded-small: 5px 5px 10px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity)), -5px -5px 10px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity));
-  --nm-inset: inset 6px 6px 10px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity)), inset -6px -6px 10px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity));
-  --nm-inset-deep: inset 10px 10px 20px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity-hover)), inset -10px -10px 20px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity-hover));
-  --nm-inset-small: inset 3px 3px 6px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity)), inset -3px -3px 6px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity));
-
-  /* Primary Accent Neumorphic Shadows */
-  --nm-btn-primary-shadow: 4px 4px 10px rgba(0, 0, 0, 0.25), -4px -4px 10px rgba(255, 255, 255, 0.2);
-  --nm-btn-primary-shadow-hover: 6px 6px 14px rgba(0, 0, 0, 0.3), -6px -6px 14px rgba(255, 255, 255, 0.25);
-  --nm-btn-primary-shadow-active: inset 3px 3px 6px rgba(0, 0, 0, 0.35), inset -3px -3px 6px rgba(255, 255, 255, 0.2);
-
-  --glass-bg: rgba(224, 229, 236, 0.3);
-  --glass-border: rgba(224, 229, 236, 0.4);
+  --glass-bg: rgba(15, 23, 42, 0.05);
+  --glass-border: rgba(15, 23, 42, 0.1);
 }
 
 .dark {
-  /* Neumorphic base colors - all shades of slate mapped to monochromatic dark background #1E222B */
-  --color-slate-950: 30 34 43; /* Background */
-  --color-slate-900: 30 34 43; /* Cards */
-  --color-slate-800: 30 34 43; /* Inputs/Buttons */
-  --color-slate-700: 30 34 43; /* Borders */
-  --color-slate-600: 30 34 43;
-  --color-slate-500: 148 163 184;
-  --color-slate-400: 148 163 184; /* Muted text #94A3B8 */
-  --color-slate-300: 226 232 240;
-  --color-slate-200: 226 232 240;
-  --color-slate-100: 226 232 240; /* Primary text #E2E8F0 */
-  --color-slate-50: 226 232 240;
+  --color-slate-50: 248 250 252;   /* slate-50 */
+  --color-slate-100: 241 245 249;  /* slate-100 */
+  --color-slate-200: 226 232 240;  /* slate-200 */
+  --color-slate-300: 203 213 225;  /* slate-300 */
+  --color-slate-400: 148 163 184;  /* slate-400 */
+  --color-slate-500: 100 116 139;  /* slate-500 */
+  --color-slate-600: 71 85 105;    /* slate-600 */
+  --color-slate-700: 51 65 85;     /* slate-700 */
+  --color-slate-800: 30 41 59;     /* slate-800 */
+  --color-slate-900: 15 23 42;     /* slate-900 */
+  --color-slate-950: 2 6 23;       /* slate-950 */
 
-  /* Shadows base values (Dark mode) */
-  --nm-shadow-light-color: 255, 255, 255;
-  --nm-shadow-dark-color: 0, 0, 0;
-  --nm-shadow-light-opacity: 0.05;
-  --nm-shadow-light-opacity-hover: 0.06;
-  --nm-shadow-dark-opacity: 0.45;
-  --nm-shadow-dark-opacity-hover: 0.55;
-
-  /* CSS shadow variables */
-  --nm-extruded: 9px 9px 16px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity)), -9px -9px 16px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity));
-  --nm-extruded-hover: 12px 12px 20px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity-hover)), -12px -12px 20px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity-hover));
-  --nm-extruded-small: 5px 5px 10px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity)), -5px -5px 10px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity));
-  --nm-inset: inset 6px 6px 10px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity)), inset -6px -6px 10px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity));
-  --nm-inset-deep: inset 10px 10px 20px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity-hover)), inset -10px -10px 20px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity-hover));
-  --nm-inset-small: inset 3px 3px 6px rgba(var(--nm-shadow-dark-color), var(--nm-shadow-dark-opacity)), inset -3px -3px 6px rgba(var(--nm-shadow-light-color), var(--nm-shadow-light-opacity));
-
-  /* Primary Accent Neumorphic Shadows (Dark mode) */
-  --nm-btn-primary-shadow: 4px 4px 10px rgba(0, 0, 0, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.05);
-  --nm-btn-primary-shadow-hover: 6px 6px 14px rgba(0, 0, 0, 0.5), -6px -6px 14px rgba(255, 255, 255, 0.07);
-  --nm-btn-primary-shadow-active: inset 3px 3px 6px rgba(0, 0, 0, 0.5), inset -3px -3px 6px rgba(255, 255, 255, 0.05);
-
-  --glass-bg: rgba(30, 34, 43, 0.3);
-  --glass-border: rgba(30, 34, 43, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
 }
 
 @layer base {
   body {
     @apply bg-slate-950 text-slate-100 font-sans;
-    margin: 0;
-    min-height: 100vh;
   }
 
   * {
-    @apply box-border border-transparent;
-    outline: none;
+    @apply box-border;
   }
 
-  /* Transition shadows and sizes for sleek UX */
-  body, nav, header, footer, .card, .input, .btn-primary, .btn-secondary, .btn-danger, td, th, tr, button {
-    transition: background-color 300ms ease-out, border-color 300ms ease-out, color 300ms ease-out, box-shadow 300ms ease-out, transform 300ms ease-out;
-  }
-
-  /* Focus indicator for keyboard accessibility */
-  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
-    @apply ring-2 ring-accent-500 ring-offset-2;
-    ring-offset-color: rgb(var(--color-slate-950));
+  body, nav, header, footer, .card, .input, .btn-secondary, td, th, tr, button {
+    transition: background-color 200ms ease-in-out, border-color 200ms ease-in-out, color 200ms ease-in-out;
   }
 }
 
 @layer components {
-  /* Neumorphic display font utility */
-  .font-display {
-    font-family: 'Plus Jakarta Sans', sans-serif;
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-500 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-primary-500/25 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0;
   }
 
-  /* Extruded card container */
+  .btn-secondary {
+    @apply bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold px-6 py-3 rounded-xl transition-all duration-200 border border-slate-700 hover:border-slate-600;
+  }
+
+  .btn-danger {
+    @apply bg-red-600/20 hover:bg-red-600/30 text-red-400 font-semibold px-6 py-3 rounded-xl transition-all duration-200 border border-red-600/30 hover:border-red-500/50;
+  }
+
   .card {
-    @apply bg-slate-900 rounded-[32px] p-6 shadow-nm-extruded border-0;
-    transition: transform 300ms ease-out, box-shadow 300ms ease-out;
-  }
-  .card:hover {
-    transform: translateY(-2px);
-    @apply shadow-nm-extruded-hover;
+    @apply bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl;
   }
 
-  /* Inset input field */
   .input {
-    @apply w-full bg-slate-800 rounded-2xl px-4 py-3 text-slate-100 placeholder-slate-500 shadow-nm-inset border-0 focus:outline-none focus:shadow-nm-inset-deep focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all duration-300;
+    @apply w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200;
   }
 
   .label {
-    @apply block text-sm font-semibold text-slate-400 mb-2;
+    @apply block text-sm font-medium text-slate-400 mb-1.5;
   }
 
-  /* Primary raised CTA using brand purple */
-  .btn-primary {
-    @apply bg-accent-500 text-white font-bold px-6 py-3 rounded-2xl shadow-[var(--nm-btn-primary-shadow)] border-0 flex items-center justify-center gap-2 select-none;
-  }
-  .btn-primary:hover:not(:disabled) {
-    @apply bg-accent-400 -translate-y-[1px] shadow-[var(--nm-btn-primary-shadow-hover)];
-  }
-  .btn-primary:active:not(:disabled) {
-    @apply translate-y-[0.5px] shadow-[var(--nm-btn-primary-shadow-active)];
-  }
-  .btn-primary:disabled {
-    @apply opacity-50 cursor-not-allowed;
-  }
-
-  /* Secondary monochromatic button */
-  .btn-secondary {
-    @apply bg-slate-800 text-slate-100 font-bold px-6 py-3 rounded-2xl shadow-nm-extruded-sm border-0 flex items-center justify-center gap-2 select-none;
-  }
-  .btn-secondary:hover:not(:disabled) {
-    @apply text-slate-100 -translate-y-[1px] shadow-nm-extruded;
-  }
-  .btn-secondary:active:not(:disabled) {
-    @apply translate-y-[0.5px] shadow-nm-inset-sm;
-  }
-  .btn-secondary:disabled {
-    @apply opacity-50 cursor-not-allowed;
-  }
-
-  /* Danger button */
-  .btn-danger {
-    @apply bg-red-600 text-white font-bold px-6 py-3 rounded-2xl shadow-nm-extruded-sm border-0 flex items-center justify-center gap-2 select-none;
-  }
-  .btn-danger:hover:not(:disabled) {
-    @apply bg-red-500 -translate-y-[1px] shadow-nm-extruded;
-  }
-  .btn-danger:active:not(:disabled) {
-    @apply translate-y-[0.5px] shadow-nm-inset-sm;
-  }
-  .btn-danger:disabled {
-    @apply opacity-50 cursor-not-allowed;
-  }
-
-  /* Badges - styled as subtle inset wells */
   .badge-correct {
-    @apply bg-slate-900 text-accent-secondary shadow-nm-inset px-3.5 py-1.5 rounded-full text-xs font-bold border-0 uppercase tracking-wider;
+    @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-sm font-medium;
   }
 
   .badge-wrong {
-    @apply bg-slate-900 text-red-400 shadow-nm-inset px-3.5 py-1.5 rounded-full text-xs font-bold border-0 uppercase tracking-wider;
+    @apply bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1 rounded-full text-sm font-medium;
   }
 
   .badge-skipped {
-    @apply bg-slate-900 text-slate-400 shadow-nm-inset px-3.5 py-1.5 rounded-full text-xs font-bold border-0 uppercase tracking-wider;
+    @apply bg-slate-700/50 text-slate-400 border border-slate-600/50 px-3 py-1 rounded-full text-sm font-medium;
   }
 
-  /* Neumorphic active/inactive folder tabs */
-  .nm-tab {
-    @apply whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-300 border-0 flex items-center gap-2 select-none;
-  }
-  .nm-tab-active {
-    background-color: rgba(108, 99, 255, 0.15);
-    color: #6c63ff;
-    @apply shadow-nm-inset-sm;
-  }
-  .nm-tab-inactive {
-    @apply bg-slate-800 text-slate-400 shadow-nm-extruded-sm;
-  }
-  .nm-tab-inactive:hover {
-    @apply text-slate-200 shadow-nm-extruded -translate-y-[0.5px];
-  }
-
-  /* Neumorphic toggle switch track & thumb */
-  .nm-toggle-track-active {
-    background-color: rgba(108, 99, 255, 0.25);
-    @apply shadow-nm-inset-sm;
-  }
-  .nm-toggle-track-inactive {
-    @apply bg-slate-800 shadow-nm-inset-sm;
-  }
-  .nm-toggle-thumb {
-    @apply bg-slate-100 shadow-nm-extruded-sm;
-  }
-
-  /* Glass backdrop fallback */
   .glass {
     background-color: var(--glass-bg);
-    @apply backdrop-blur-sm shadow-nm-extruded border-0;
+    border-color: var(--glass-border);
+    @apply backdrop-blur-sm border;
   }
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 ::-webkit-scrollbar-track {
   background: rgb(var(--color-slate-950));
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(var(--nm-shadow-dark-color), 0.35);
-  border-radius: 4px;
+  background: rgb(var(--color-slate-800));
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--nm-shadow-dark-color), 0.55);
+  background: rgb(var(--color-slate-700));
 }

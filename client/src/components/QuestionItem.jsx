@@ -99,22 +99,22 @@ export default function QuestionItem({ question, index, selected, onSelect }) {
             return (
               <label
                 key={i}
-                className={`flex items-center gap-3 p-3.5 rounded-2xl cursor-pointer transition-all duration-300 ${
+                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all duration-200 border ${
                   isSelected
-                    ? 'bg-slate-900 text-accent-500 shadow-nm-inset'
-                    : 'bg-slate-800 text-slate-300 shadow-nm-extruded-sm hover:-translate-y-[0.5px] hover:shadow-nm-extruded'
+                    ? 'bg-primary-500/20 border-primary-500/60 text-primary-300'
+                    : 'bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-800 hover:border-slate-600'
                 }`}
               >
-                <div className={`w-5 h-5 flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
-                  isMulti ? 'rounded' : 'rounded-full'
+                <div className={`w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 transition-all duration-200 ${
+                  isMulti ? 'rounded-md' : 'rounded-full'
                 } ${
-                  isSelected ? 'bg-accent-500 shadow-nm-inset-sm text-white' : 'bg-slate-900 shadow-nm-inset-sm'
+                  isSelected ? 'border-primary-400 bg-primary-400' : 'border-slate-600'
                 }`}>
                   {isSelected && (
                     isMulti ? (
                       <div className="w-1.5 h-1.5 bg-white rounded-sm" />
                     ) : (
-                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                      <div className="w-2 h-2 rounded-full bg-white" />
                     )
                   )}
                 </div>
@@ -126,7 +126,7 @@ export default function QuestionItem({ question, index, selected, onSelect }) {
                   onChange={() => handleOptionClick(option)}
                   className="sr-only"
                 />
-                <span className="text-sm font-medium">{option}</span>
+                <span className="text-sm">{option}</span>
               </label>
             );
           })}
@@ -170,14 +170,14 @@ export function QuestionReview({ answer, index }) {
   const wasSkipped = !answer.selectedAnswer || answer.selectedAnswer === '' || answer.selectedAnswer === '[]';
 
   return (
-    <div className="card">
+    <div className={`card border ${isCorrect ? 'border-emerald-500/30' : 'border-red-500/30'}`}>
       <div className="flex items-start gap-3 mb-4">
-        <span className={`flex-shrink-0 w-8 h-8 rounded-full shadow-nm-inset-sm bg-slate-900 flex items-center justify-center ${
-          isCorrect ? 'text-accent-secondary' : 'text-red-400'
+        <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+          isCorrect ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
         }`}>
           {isCorrect
-            ? <CheckCircle className="w-4 h-4" />
-            : wasSkipped ? <MinusCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />
+            ? <CheckCircle className="w-5 h-5" />
+            : wasSkipped ? <MinusCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />
           }
         </span>
         <div className="flex-1 min-w-0">
@@ -233,7 +233,7 @@ export function QuestionReview({ answer, index }) {
 
         {/* Explanation Text */}
         {answer.explanationText && (
-          <div className="mt-4 p-4 bg-slate-900 shadow-nm-inset-sm rounded-2xl text-xs text-slate-400 leading-relaxed">
+          <div className="mt-4 p-3 bg-slate-900/60 border border-slate-800 rounded-xl text-xs text-slate-400 leading-relaxed">
             <span className="block font-semibold text-slate-300 mb-1">Explanation:</span>
             {answer.explanationText}
           </div>

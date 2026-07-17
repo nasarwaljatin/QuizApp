@@ -261,11 +261,11 @@ export default function QuizPage() {
                 const status = getQuestionStatus(idx);
                 const isActive = idx === currentIndex;
                 
-                let bgClass = 'bg-slate-800 shadow-nm-extruded-sm text-slate-400 border-0';
+                let bgClass = 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600';
                 if (status === 'attempted') {
-                  bgClass = 'bg-[#38B2AC]/10 text-accent-secondary shadow-nm-extruded-sm border-0';
+                  bgClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30';
                 } else if (status === 'visited') {
-                  bgClass = 'bg-red-500/10 text-red-400 shadow-nm-extruded-sm border-0';
+                  bgClass = 'bg-red-500/20 text-red-400 border-red-500/40 hover:bg-red-500/30';
                 }
 
                 let indicator = null;
@@ -284,10 +284,8 @@ export default function QuizPage() {
                       handleNavigate(idx);
                       setPaletteOpen(false); // Auto close mobile dropdown on jump
                     }}
-                    className={`relative h-9 w-9 rounded-xl font-bold text-sm flex items-center justify-center transition-all ${
-                      isActive 
-                        ? 'shadow-nm-inset-sm bg-slate-900 text-slate-100 ring-2 ring-accent-500 ring-offset-2 ring-offset-slate-950 scale-105' 
-                        : bgClass
+                    className={`relative h-9 w-9 rounded-lg font-bold text-sm flex items-center justify-center transition-all border ${bgClass} ${
+                      isActive ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-slate-900 scale-105' : ''
                     }`}
                   >
                     {idx + 1}

@@ -95,7 +95,11 @@ export default function Home() {
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
             <button
               onClick={() => setActiveFolder('all')}
-              className={`nm-tab ${activeFolder === 'all' ? 'nm-tab-active' : 'nm-tab-inactive'}`}
+              className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold transition-colors border ${
+                activeFolder === 'all'
+                  ? 'bg-primary-500/20 text-primary-300 border-primary-500/30'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
+              }`}
             >
               ALL
             </button>
@@ -103,11 +107,15 @@ export default function Home() {
               <button
                 key={folder._id}
                 onClick={() => setActiveFolder(folder._id)}
-                className={`nm-tab ${activeFolder === folder._id ? 'nm-tab-active' : 'nm-tab-inactive'}`}
+                className={`whitespace-nowrap flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors border ${
+                  activeFolder === folder._id
+                    ? 'bg-primary-500/20 text-primary-300 border-primary-500/30'
+                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
+                }`}
               >
                 <Folder className="w-4 h-4" />
                 {folder.name}
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeFolder === folder._id ? 'bg-accent-500/10 text-accent-500 shadow-nm-inset-sm' : 'bg-slate-800 shadow-nm-inset-sm'}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeFolder === folder._id ? 'bg-primary-500/20' : 'bg-slate-800'}`}>
                   {folder.quizCount}
                 </span>
               </button>
@@ -117,7 +125,7 @@ export default function Home() {
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
-              className="input pl-10"
+              className="input pl-10 bg-slate-900"
               placeholder="Search quizzes in this folder..."
               value={search}
               onChange={e => setSearch(e.target.value)}
