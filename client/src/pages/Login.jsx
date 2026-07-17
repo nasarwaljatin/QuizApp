@@ -71,39 +71,39 @@ export default function Login() {
       <div className="w-full max-w-md relative">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-600/20 border border-primary-500/30 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl shadow-nm-inset-sm bg-slate-900 mb-4">
             <span className="text-3xl">🧠</span>
           </div>
-          <h1 className="text-3xl font-bold text-slate-100">Welcome back</h1>
+          <h1 className="text-3xl font-extrabold font-display text-slate-100">Welcome back</h1>
           <p className="text-slate-400 mt-1">Sign in to your QuizApp account</p>
         </div>
 
         <div className="card">
           {/* Mode tabs */}
-          <div className="flex bg-slate-800 rounded-xl p-1 mb-6">
+          <div className="flex bg-slate-800 shadow-nm-inset-sm rounded-2xl p-1 mb-6">
             <button
               type="button"
               onClick={() => { setMode('password'); setError(''); setInfo(''); setOtpSent(false); }}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${mode === 'password' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-300'}`}
+              className={`flex-1 py-2 text-sm font-bold rounded-xl transition-all ${mode === 'password' ? 'bg-slate-900 shadow-nm-extruded-sm text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}
             >
               Password
             </button>
             <button
               type="button"
               onClick={() => { setMode('otp'); setError(''); setInfo(''); }}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${mode === 'otp' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-300'}`}
+              className={`flex-1 py-2 text-sm font-bold rounded-xl transition-all ${mode === 'otp' ? 'bg-slate-900 shadow-nm-extruded-sm text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}
             >
               Login with OTP
             </button>
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl px-4 py-3 text-sm mb-4">
+            <div className="bg-slate-900 shadow-nm-inset text-red-400 rounded-2xl px-4 py-3 text-sm mb-4">
               {error}
             </div>
           )}
           {info && (
-            <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl px-4 py-3 text-sm mb-4">
+            <div className="bg-slate-900 shadow-nm-inset text-accent-secondary rounded-2xl px-4 py-3 text-sm mb-4">
               {info}
             </div>
           )}

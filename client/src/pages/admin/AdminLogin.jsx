@@ -34,16 +34,16 @@ export default function AdminLogin() {
 
       <div className="w-full max-w-sm relative">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-accent-600/20 border border-accent-500/30 mb-4">
-            <ShieldCheck className="w-8 h-8 text-accent-400" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl shadow-nm-inset-sm bg-slate-900 mb-4">
+            <ShieldCheck className="w-8 h-8 text-accent-500" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-100">Admin Portal</h1>
-          <p className="text-slate-500 text-sm mt-1">Restricted access — authorized personnel only</p>
+          <h1 className="text-2xl font-extrabold font-display text-slate-100">Admin Portal</h1>
+          <p className="text-slate-400 text-sm mt-1">Restricted access — authorized personnel only</p>
         </div>
 
-        <div className="card border-accent-500/20">
+        <div className="card">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl px-4 py-3 text-sm mb-4">
+            <div className="bg-slate-900 shadow-nm-inset text-red-400 rounded-2xl px-4 py-3 text-sm mb-4">
               {error}
             </div>
           )}

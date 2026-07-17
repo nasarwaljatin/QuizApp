@@ -205,16 +205,16 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
   };
 
   const FormToggle = ({ checked, onChange, label, description }) => (
-    <div className="flex items-start justify-between py-3 border-b border-slate-800/60 last:border-0">
+    <div className="flex items-start justify-between py-3 border-b border-slate-800/40 last:border-0">
       <div className="flex-1 pr-4">
         <label className="text-sm font-semibold text-slate-200 block">{label}</label>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
       </div>
       <div
         onClick={() => onChange(!checked)}
-        className={`w-11 h-6 rounded-full transition-all duration-300 flex items-center px-1 cursor-pointer flex-shrink-0 ${checked ? 'bg-primary-500' : 'bg-slate-700'}`}
+        className={`w-11 h-6 rounded-full transition-all duration-300 flex items-center px-1 cursor-pointer flex-shrink-0 ${checked ? 'nm-toggle-track-active' : 'nm-toggle-track-inactive'}`}
       >
-        <div className={`w-4 h-4 rounded-full bg-white transition-transform duration-300 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+        <div className={`w-4 h-4 rounded-full nm-toggle-thumb transition-transform duration-300 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
       </div>
     </div>
   );
@@ -240,11 +240,11 @@ export default function QuizForm({ initialData, onSubmit, loading }) {
           <label className="flex items-center gap-3 cursor-pointer">
             <div
               onClick={() => setIsPublished(!isPublished)}
-              className={`w-12 h-6 rounded-full transition-all duration-300 flex items-center px-1 ${isPublished ? 'bg-primary-500' : 'bg-slate-700'}`}
+              className={`w-12 h-6 rounded-full transition-all duration-300 flex items-center px-1 cursor-pointer flex-shrink-0 ${isPublished ? 'nm-toggle-track-active' : 'nm-toggle-track-inactive'}`}
             >
-              <div className={`w-4 h-4 rounded-full bg-white transition-transform duration-300 ${isPublished ? 'translate-x-6' : 'translate-x-0'}`} />
+              <div className={`w-4 h-4 rounded-full nm-toggle-thumb transition-transform duration-300 ${isPublished ? 'translate-x-6' : 'translate-x-0'}`} />
             </div>
-            <span className="text-sm text-slate-400">{isPublished ? 'Published' : 'Draft'}</span>
+            <span className="text-sm text-slate-400 font-medium">{isPublished ? 'Published' : 'Draft'}</span>
           </label>
         </div>
 

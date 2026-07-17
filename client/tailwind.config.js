@@ -8,7 +8,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['"DM Sans"', 'sans-serif'],
+        display: ['"Plus Jakarta Sans"', 'sans-serif'],
       },
       colors: {
         slate: {
@@ -37,10 +38,19 @@ export default {
           900: '#0c4a6e',
         },
         accent: {
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-        }
+          400: '#8b84ff',
+          500: '#6c63ff',
+          600: '#554ce0',
+        },
+        'accent-secondary': '#38b2ac',
+      },
+      boxShadow: {
+        'nm-extruded': 'var(--nm-extruded)',
+        'nm-extruded-hover': 'var(--nm-extruded-hover)',
+        'nm-extruded-sm': 'var(--nm-extruded-small)',
+        'nm-inset': 'var(--nm-inset)',
+        'nm-inset-deep': 'var(--nm-inset-deep)',
+        'nm-inset-sm': 'var(--nm-inset-small)',
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-in-out',
